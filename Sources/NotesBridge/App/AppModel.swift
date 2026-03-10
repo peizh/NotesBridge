@@ -210,6 +210,7 @@ final class AppModel: ObservableObject {
         let transformer = self.transformer
         let syncEngine = self.syncEngine
         let settings = self.settings
+        let existingRecords = self.syncIndex.records
 
         isSyncing = true
         statusMessage = "Syncing Apple Notes to Obsidian..."
@@ -220,22 +221,51 @@ final class AppModel: ObservableObject {
 
         do {
             let result = try await Task.detached(priority: .utility) {
+                let totalStart = Date()
+                var timings = SyncTimings()
+                var diagnostics = SyncDiagnostics()
+
+                let fetchFoldersStart = Date()
                 let folders = try notesClient.fetchFolders()
+                timings.fetchFolders = Date().timeIntervalSince(fetchFoldersStart)
                 var records: [SyncRecord] = []
 
                 for folder in folders {
-                    let summaries = try notesClient.fetchNoteSummaries(inFolderID: folder.id)
-                    for summary in summaries where !summary.passwordProtected {
-                        let document = try notesClient.fetchDocument(id: summary.id)
-                        let markdown = transformer.htmlToMarkdown(document.htmlBody)
-                        let record = try syncEngine.sync(document: document, markdown: markdown, settings: settings)
+                    let fetchResult = try FolderDocumentFetcher.fetchDocuments(
+                        for: folder,
+                        using: notesClient,
+                        timings: &timings
+                    )
+                    diagnostics.incrementalFolders += fetchResult.mode == .incremental ? 1 : 0
+                    diagnostics.skippedNotes += fetchResult.skippedCount
+
+                    for document in fetchResult.documents {
+                        let transformStart = Date()
+                        let markdown = transformer.htmlToMarkdown(
+                            document.htmlBody,
+                            fallbackPlaintext: document.plaintext
+                        )
+                        timings.transform += Date().timeIntervalSince(transformStart)
+
+                        let exportStart = Date()
+                        let record = try syncEngine.sync(
+                            document: document,
+                            markdown: markdown,
+                            settings: settings,
+                            existingRelativePath: existingRecords[document.id]?.relativePath
+                        )
+                        timings.export += Date().timeIntervalSince(exportStart)
                         records.append(record)
                     }
                 }
 
+                timings.total = Date().timeIntervalSince(totalStart)
+
                 return FullSyncResult(
                     folders: folders,
-                    records: records
+                    records: records,
+                    timings: timings,
+                    diagnostics: diagnostics
                 )
             }.value
 
@@ -245,11 +275,16 @@ final class AppModel: ObservableObject {
             for record in result.records {
                 syncIndex.records[record.noteID] = record
             }
+            let persistStart = Date()
             syncIndex.lastFullSyncAt = Date()
             syncIndex.lastFullSyncNoteCount = result.records.count
             syncIndex.lastFullSyncFolderCount = result.folders.count
             try persistence.saveSyncIndex(syncIndex)
-            statusMessage = "Synced \(result.records.count) note(s) across \(result.folders.count) folder(s)."
+            let persistDuration = Date().timeIntervalSince(persistStart)
+            let timingSummary = result.timings.summary(persistIndex: persistDuration)
+            let diagnosticsSummary = result.diagnostics.summary
+            print("Sync timings: \(timingSummary)")
+            statusMessage = "Synced \(result.records.count) note(s) across \(result.folders.count) folder(s). \(timingSummary)\(diagnosticsSummary.isEmpty ? "" : " \(diagnosticsSummary)")"
         } catch {
             present(error, fallback: "Failed to sync Apple Notes to Obsidian.")
         }
@@ -302,8 +337,10 @@ final class AppModel: ObservableObject {
     }
 
     private func present(_ error: Error, fallback: String) {
-        errorMessage = error.localizedDescription.isEmpty ? fallback : error.localizedDescription
-        statusMessage = fallback
+        let detail = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        let message = detail.isEmpty || detail == fallback ? fallback : "\(fallback) \(detail)"
+        errorMessage = message
+        statusMessage = message
     }
 
     private func presentMessage(_ message: String) {
@@ -315,4 +352,136 @@ final class AppModel: ObservableObject {
 private struct FullSyncResult {
     var folders: [AppleNotesFolder]
     var records: [SyncRecord]
+    var timings: SyncTimings
+    var diagnostics: SyncDiagnostics
+}
+
+private struct SyncTimings: Sendable {
+    var fetchFolders: TimeInterval = 0
+    var fetchDocuments: TimeInterval = 0
+    var transform: TimeInterval = 0
+    var export: TimeInterval = 0
+    var total: TimeInterval = 0
+
+    func summary(persistIndex: TimeInterval) -> String {
+        let totalDuration = total + persistIndex
+        return "Total \(totalDuration.formattedDuration); folders \(fetchFolders.formattedDuration); documents \(fetchDocuments.formattedDuration); transform \(transform.formattedDuration); export \(export.formattedDuration); persist \(persistIndex.formattedDuration)."
+    }
+}
+
+private struct SyncDiagnostics: Sendable {
+    var incrementalFolders = 0
+    var skippedNotes = 0
+
+    var summary: String {
+        var parts: [String] = []
+
+        if incrementalFolders > 0 {
+            parts.append("Incremental fetch used for \(incrementalFolders) folder(s).")
+        }
+
+        if skippedNotes > 0 {
+            parts.append("Skipped \(skippedNotes) locked or missing note(s).")
+        }
+
+        return parts.joined(separator: " ")
+    }
+}
+
+private enum FolderDocumentFetchMode: Sendable {
+    case batch
+    case incremental
+}
+
+private struct FolderDocumentFetchResult: Sendable {
+    var documents: [AppleNoteDocument]
+    var mode: FolderDocumentFetchMode
+    var skippedCount: Int = 0
+}
+
+private enum FolderDocumentFetcher {
+    private static let maxBatchDocumentCount = 25
+
+    static func fetchDocuments(
+        for folder: AppleNotesFolder,
+        using notesClient: any AppleNotesClient,
+        timings: inout SyncTimings
+    ) throws -> FolderDocumentFetchResult {
+        if folder.noteCount <= maxBatchDocumentCount {
+            let batchStart = Date()
+            do {
+                let documents = try notesClient.fetchDocuments(inFolderID: folder.id)
+                timings.fetchDocuments += Date().timeIntervalSince(batchStart)
+                return FolderDocumentFetchResult(
+                    documents: sortedDocuments(documents),
+                    mode: .batch
+                )
+            } catch {
+                timings.fetchDocuments += Date().timeIntervalSince(batchStart)
+                print("Falling back to incremental note fetch for \(folder.displayName): \(error.localizedDescription)")
+            }
+        }
+
+        let summariesStart = Date()
+        let summaries = try notesClient.fetchNoteSummaries(inFolderID: folder.id)
+        timings.fetchDocuments += Date().timeIntervalSince(summariesStart)
+
+        var documents: [AppleNoteDocument] = []
+        var skippedCount = 0
+
+        for summary in sortedSummaries(summaries) {
+            if summary.passwordProtected {
+                skippedCount += 1
+                continue
+            }
+
+            let documentStart = Date()
+            do {
+                documents.append(try notesClient.fetchDocument(id: summary.id, inFolderID: folder.id))
+            } catch let error as AppleNotesError {
+                switch error {
+                case .lockedNote, .noteNotFound:
+                    skippedCount += 1
+                    print("Skipping \(summary.displayName) in \(folder.displayName): \(error.localizedDescription)")
+                case .invalidResponse:
+                    throw error
+                }
+            }
+            timings.fetchDocuments += Date().timeIntervalSince(documentStart)
+        }
+
+        return FolderDocumentFetchResult(
+            documents: sortedDocuments(documents),
+            mode: .incremental,
+            skippedCount: skippedCount
+        )
+    }
+
+    private static func sortedDocuments(_ documents: [AppleNoteDocument]) -> [AppleNoteDocument] {
+        documents.sorted {
+            let nameComparison = $0.displayName.localizedCaseInsensitiveCompare($1.displayName)
+            if nameComparison != .orderedSame {
+                return nameComparison == .orderedAscending
+            }
+
+            return $0.id < $1.id
+        }
+    }
+
+    private static func sortedSummaries(_ summaries: [AppleNoteSummary]) -> [AppleNoteSummary] {
+        summaries.sorted {
+            let nameComparison = $0.displayName.localizedCaseInsensitiveCompare($1.displayName)
+            if nameComparison != .orderedSame {
+                return nameComparison == .orderedAscending
+            }
+
+            return $0.id < $1.id
+        }
+    }
+}
+
+private extension TimeInterval {
+    var formattedDuration: String {
+        String(format: "%.2fs", self)
+    }
 }

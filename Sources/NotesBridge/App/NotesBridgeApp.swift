@@ -12,11 +12,12 @@ struct NotesBridgeApp: App {
         }
         .menuBarExtraStyle(.window)
 
-        Settings {
+        Window("Settings", id: AppWindowID.settings) {
             SettingsView()
                 .environmentObject(appModel)
                 .frame(width: 640, height: 560)
                 .padding(24)
         }
+        .windowResizability(.contentSize)
     }
 }

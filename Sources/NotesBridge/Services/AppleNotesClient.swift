@@ -3,7 +3,8 @@ import Foundation
 protocol AppleNotesClient: Sendable {
     func fetchFolders() throws -> [AppleNotesFolder]
     func fetchNoteSummaries(inFolderID folderID: String) throws -> [AppleNoteSummary]
-    func fetchDocument(id: String) throws -> AppleNoteDocument
+    func fetchDocuments(inFolderID folderID: String) throws -> [AppleNoteDocument]
+    func fetchDocument(id: String, inFolderID folderID: String) throws -> AppleNoteDocument
     func updateNote(id: String, htmlBody: String) throws
 }
 
@@ -132,7 +133,7 @@ struct AppleNotesScriptClient: AppleNotesClient {
         }
     }
 
-    func fetchDocument(id: String) throws -> AppleNoteDocument {
+    func fetchDocument(id: String, inFolderID folderID: String) throws -> AppleNoteDocument {
         let script = """
         function safeString(value) {
           return value === null || value === undefined ? "" : String(value);
@@ -144,7 +145,12 @@ struct AppleNotesScriptClient: AppleNotesClient {
 
         const noteID = \(javaScriptStringLiteral(id));
         const Notes = Application("Notes");
-        const note = Notes.notes().find((candidate) => candidate.id() === noteID);
+        let note;
+        try {
+          note = Notes.notes.byId(noteID);
+        } catch (e) {
+          throw new Error("NOTE_NOT_FOUND");
+        }
 
         if (!note) {
           throw new Error("NOTE_NOT_FOUND");
@@ -187,6 +193,59 @@ struct AppleNotesScriptClient: AppleNotesClient {
             }
             throw error
         }
+    }
+
+    func fetchDocuments(inFolderID folderID: String) throws -> [AppleNoteDocument] {
+        let script = """
+        function safeString(value) {
+          return value === null || value === undefined ? "" : String(value);
+        }
+
+        function isoString(value) {
+          return value ? (new Date(value)).toISOString() : null;
+        }
+
+        const folderID = \(javaScriptStringLiteral(folderID));
+        const Notes = Application("Notes");
+        let folder;
+        try {
+          folder = Notes.folders.byId(folderID);
+        } catch (e) {
+          throw new Error("FOLDER_NOT_FOUND");
+        }
+
+        if (!folder) {
+          throw new Error("FOLDER_NOT_FOUND");
+        }
+
+        const folderName = safeString(folder.name());
+        const notes = folder.notes();
+        const payload = [];
+
+        for (let index = 0; index < notes.length; index += 1) {
+          const note = notes[index];
+          const passwordProtected = Boolean(note.passwordProtected());
+          if (passwordProtected) {
+            continue;
+          }
+
+          payload.push({
+            id: safeString(note.id()),
+            name: safeString(note.name()),
+            folder: folderName,
+            createdAt: isoString(note.creationDate()),
+            updatedAt: isoString(note.modificationDate()),
+            shared: Boolean(note.shared()),
+            passwordProtected,
+            plaintext: safeString(note.plaintext()),
+            htmlBody: safeString(note.body())
+          });
+        }
+
+        JSON.stringify(payload);
+        """
+
+        return try decodeJSON([AppleNoteDocument].self, from: runJXA(script))
     }
 
     func updateNote(id: String, htmlBody: String) throws {

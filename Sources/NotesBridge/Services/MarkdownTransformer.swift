@@ -1,73 +1,27 @@
 import AppKit
 import Foundation
+import SwiftSoup
 
 struct MarkdownTransformer: Sendable {
-    func htmlToMarkdown(_ html: String) -> String {
-        guard !html.isEmpty else { return "" }
-
-        var output = html.replacingOccurrences(of: "\r\n", with: "\n")
-        output = output.replacingOccurrences(of: "\r", with: "\n")
-
-        output = replacing(
-            pattern: "(?is)<img\\b[^>]*>",
-            in: output,
-            with: "\n> Apple Notes attachment omitted\n"
-        )
-
-        output = replace(
-            pattern: "(?is)<a\\b[^>]*href=[\"']([^\"']+)[\"'][^>]*>(.*?)</a>",
-            in: output
-        ) { captures in
-            "[\(decodeHTML(captures[1]))](\(decodeHTML(captures[0])))"
+    func htmlToMarkdown(_ html: String, fallbackPlaintext: String? = nil) -> String {
+        guard !html.isEmpty else {
+            return normalizePlaintextFallback(fallbackPlaintext ?? "")
         }
 
-        output = replace(
-            pattern: "(?is)<(strong|b)\\b[^>]*>(.*?)</\\1>",
-            in: output
-        ) { captures in
-            let content = decodeHTML(stripTags(from: captures[1])).trimmingCharacters(in: .whitespacesAndNewlines)
-            return "**\(content)**"
-        }
+        do {
+            let document = try SwiftSoup.parseBodyFragment(normalizeLineEndings(html))
+            let body = document.body()
+            let blocks = try MarkdownHTMLRenderer().renderBlocks(from: body?.getChildNodes() ?? [])
+            let markdown = normalizeFinalMarkdown(blocks.joined(separator: "\n\n"))
 
-        output = replace(
-            pattern: "(?is)<(em|i)\\b[^>]*>(.*?)</\\1>",
-            in: output
-        ) { captures in
-            let content = decodeHTML(stripTags(from: captures[1])).trimmingCharacters(in: .whitespacesAndNewlines)
-            return "*\(content)*"
-        }
-
-        output = replace(
-            pattern: "(?is)<code\\b[^>]*>(.*?)</code>",
-            in: output
-        ) { captures in
-            "`\(decodeHTML(stripTags(from: captures[0])))`"
-        }
-
-        for level in 1 ... 3 {
-            output = replace(
-                pattern: "(?is)<h\(level)\\b[^>]*>(.*?)</h\(level)>",
-                in: output
-            ) { captures in
-                "\(String(repeating: "#", count: level)) \(decodeHTML(stripTags(from: captures[0])).trimmingCharacters(in: .whitespacesAndNewlines))\n\n"
+            if markdown.isEmpty {
+                return normalizePlaintextFallback(fallbackPlaintext ?? plaintext(fromHTML: html))
             }
-        }
 
-        output = replace(
-            pattern: "(?is)<li\\b[^>]*>(.*?)</li>",
-            in: output
-        ) { captures in
-            "- \(decodeHTML(stripTags(from: captures[0])).trimmingCharacters(in: .whitespacesAndNewlines))\n"
+            return markdown
+        } catch {
+            return normalizePlaintextFallback(fallbackPlaintext ?? plaintext(fromHTML: html))
         }
-
-        output = replacing(pattern: "(?is)</?(ul|ol)\\b[^>]*>", in: output, with: "\n")
-        output = replacing(pattern: "(?is)<br\\s*/?>", in: output, with: "\n")
-        output = replacing(pattern: "(?is)</?(div|p|section|article|blockquote)\\b[^>]*>", in: output, with: "\n")
-        output = replacing(pattern: "(?is)<[^>]+>", in: output, with: "")
-        output = decodeHTML(output)
-        output = output.replacingOccurrences(of: "[ \\t]+\\n", with: "\n", options: .regularExpression)
-        output = output.replacingOccurrences(of: "\\n{3,}", with: "\n\n", options: .regularExpression)
-        return output.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     func plaintext(fromHTML html: String) -> String {
@@ -212,10 +166,6 @@ struct MarkdownTransformer: Sendable {
         )
     }
 
-    private func decodeHTML(_ value: String) -> String {
-        htmlAttributedString(from: value)?.string ?? value
-    }
-
     private func stripTags(from value: String) -> String {
         replacing(pattern: "(?is)<[^>]+>", in: value, with: "")
     }
@@ -251,5 +201,221 @@ struct MarkdownTransformer: Sendable {
         }
 
         return result
+    }
+
+    private func normalizeLineEndings(_ value: String) -> String {
+        value.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
+    }
+
+    private func normalizePlaintextFallback(_ value: String) -> String {
+        normalizeFinalMarkdown(normalizeLineEndings(value))
+    }
+
+    private func normalizeFinalMarkdown(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "[ \\t]+\\n", with: "\n", options: .regularExpression)
+            .replacingOccurrences(of: "\\n{3,}", with: "\n\n", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+private struct MarkdownHTMLRenderer {
+    func renderBlocks(from nodes: [Node]) throws -> [String] {
+        var blocks: [String] = []
+        var inlineBuffer = ""
+
+        func flushInlineBuffer() {
+            let normalized = normalizeInlineMarkdown(inlineBuffer)
+            if !normalized.isEmpty {
+                blocks.append(normalized)
+            }
+            inlineBuffer = ""
+        }
+
+        for node in nodes {
+            if let element = node as? Element {
+                let tagName = element.tagName().lowercased()
+                if isBlockElement(tagName) {
+                    flushInlineBuffer()
+                    let rendered = try renderBlock(element)
+                    if !rendered.isEmpty {
+                        blocks.append(rendered)
+                    }
+                } else {
+                    inlineBuffer += try renderInline(node)
+                }
+            } else {
+                inlineBuffer += try renderInline(node)
+            }
+        }
+
+        flushInlineBuffer()
+        return blocks
+    }
+
+    private func renderBlock(_ element: Element) throws -> String {
+        switch element.tagName().lowercased() {
+        case "h1":
+            let content = normalizeInlineMarkdown(try renderInlineChildren(of: element))
+            return content.isEmpty ? "" : "# \(content)"
+        case "h2":
+            let content = normalizeInlineMarkdown(try renderInlineChildren(of: element))
+            return content.isEmpty ? "" : "## \(content)"
+        case "h3":
+            let content = normalizeInlineMarkdown(try renderInlineChildren(of: element))
+            return content.isEmpty ? "" : "### \(content)"
+        case "ul":
+            return try renderList(element, ordered: false)
+        case "ol":
+            return try renderList(element, ordered: true)
+        case "blockquote":
+            let content = try renderBlocks(from: element.getChildNodes()).joined(separator: "\n\n")
+            return prefixBlockquote(content)
+        case "pre":
+            let codeElement = element.getChildNodes().compactMap { $0 as? Element }.first { $0.tagName().lowercased() == "code" }
+            let rawText = try extractRawText(from: codeElement ?? element)
+            let trimmed = rawText
+                .replacingOccurrences(of: "\r\n", with: "\n")
+                .replacingOccurrences(of: "\r", with: "\n")
+                .trimmingCharacters(in: .newlines)
+            return trimmed.isEmpty ? "" : "```\n\(trimmed)\n```"
+        case "img":
+            return "> Apple Notes attachment omitted"
+        default:
+            return try renderBlocks(from: element.getChildNodes()).joined(separator: "\n\n")
+        }
+    }
+
+    private func renderList(_ element: Element, ordered: Bool) throws -> String {
+        let items = element.getChildNodes().compactMap { $0 as? Element }.filter { $0.tagName().lowercased() == "li" }
+        return try items.enumerated().map { index, item in
+            let prefix = ordered ? "\(index + 1). " : "- "
+            return try renderListItem(item, prefix: prefix)
+        }.joined(separator: "\n")
+    }
+
+    private func renderListItem(_ element: Element, prefix: String) throws -> String {
+        let content = try renderBlocks(from: element.getChildNodes()).joined(separator: "\n")
+        let normalized = normalizeInlineMarkdown(content)
+        let lines = normalized.components(separatedBy: "\n")
+
+        return lines.enumerated().map { index, line in
+            if index == 0 {
+                return prefix + line
+            }
+
+            if line.isEmpty {
+                return ""
+            }
+
+            return String(repeating: " ", count: prefix.count) + line
+        }.joined(separator: "\n")
+    }
+
+    private func renderInlineChildren(of element: Element) throws -> String {
+        try element.getChildNodes().map { try renderInline($0) }.joined()
+    }
+
+    private func renderInline(_ node: Node) throws -> String {
+        if let textNode = node as? TextNode {
+            return normalizeTextNode(textNode.getWholeText())
+        }
+
+        guard let element = node as? Element else {
+            return ""
+        }
+
+        switch element.tagName().lowercased() {
+        case "br":
+            return "\n"
+        case "strong", "b":
+            let content = normalizeInlineMarkdown(try renderInlineChildren(of: element))
+            return content.isEmpty ? "" : "**\(content)**"
+        case "em", "i":
+            let content = normalizeInlineMarkdown(try renderInlineChildren(of: element))
+            return content.isEmpty ? "" : "*\(content)*"
+        case "code":
+            let content = normalizeInlineMarkdown(try renderInlineChildren(of: element))
+            return content.isEmpty ? "" : "`\(content)`"
+        case "a":
+            let content = normalizeInlineMarkdown(try renderInlineChildren(of: element))
+            let href = try element.attr("href")
+            if href.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return content
+            }
+            return content.isEmpty ? href : "[\(content)](\(href))"
+        case "img":
+            return "Apple Notes attachment omitted"
+        default:
+            if isBlockElement(element.tagName().lowercased()) {
+                return try renderBlocks(from: element.getChildNodes()).joined(separator: "\n\n")
+            }
+            return try renderInlineChildren(of: element)
+        }
+    }
+
+    private func extractRawText(from node: Node) throws -> String {
+        if let textNode = node as? TextNode {
+            return textNode.getWholeText()
+        }
+
+        guard let element = node as? Element else {
+            return ""
+        }
+
+        if element.tagName().lowercased() == "br" {
+            return "\n"
+        }
+
+        return try element.getChildNodes().map { try extractRawText(from: $0) }.joined()
+    }
+
+    private func prefixBlockquote(_ value: String) -> String {
+        value
+            .components(separatedBy: "\n")
+            .map { line in
+                line.isEmpty ? ">" : "> \(line)"
+            }
+            .joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func normalizeTextNode(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "\u{00A0}", with: " ")
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+            .replacingOccurrences(of: "[ \\t]+", with: " ", options: .regularExpression)
+    }
+
+    private func normalizeInlineMarkdown(_ value: String) -> String {
+        let placeholder = "\u{000B}"
+        let withPlaceholder = value.replacingOccurrences(of: "\n", with: placeholder)
+        let collapsed = withPlaceholder.replacingOccurrences(of: "[ \\t]+", with: " ", options: .regularExpression)
+        let restored = collapsed.replacingOccurrences(of: placeholder, with: "\n")
+        let normalizedLines = restored
+            .components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .joined(separator: "\n")
+        return normalizedLines.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func isBlockElement(_ tagName: String) -> Bool {
+        [
+            "body",
+            "div",
+            "p",
+            "section",
+            "article",
+            "blockquote",
+            "ul",
+            "ol",
+            "li",
+            "pre",
+            "h1",
+            "h2",
+            "h3",
+            "img",
+        ].contains(tagName)
     }
 }

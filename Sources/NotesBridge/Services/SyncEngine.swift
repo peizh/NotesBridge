@@ -10,9 +10,15 @@ struct SyncEngine: Sendable {
     func sync(
         document: AppleNoteDocument,
         markdown: String,
-        settings: AppSettings
+        settings: AppSettings,
+        existingRelativePath: String?
     ) throws -> SyncRecord {
-        let export = try vaultClient.export(note: document, markdown: markdown, settings: settings)
+        let export = try vaultClient.export(
+            note: document,
+            markdown: markdown,
+            settings: settings,
+            existingRelativePath: existingRelativePath
+        )
         return SyncRecord(
             noteID: document.id,
             relativePath: export.relativePath,

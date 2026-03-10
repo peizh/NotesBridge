@@ -44,10 +44,14 @@ struct ProcessRunner: Sendable {
         }
         stdinPipe.fileHandleForWriting.closeFile()
 
-        process.waitUntilExit()
+        let stdoutReader = PipeReader(fileHandle: stdoutPipe.fileHandleForReading)
+        let stderrReader = PipeReader(fileHandle: stderrPipe.fileHandleForReading)
+        stdoutReader.start()
+        stderrReader.start()
 
-        let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-        let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        let stdoutData = stdoutReader.finish()
+        let stderrData = stderrReader.finish()
         let result = CommandResult(
             stdout: String(decoding: stdoutData, as: UTF8.self),
             stderr: String(decoding: stderrData, as: UTF8.self),
@@ -63,5 +67,37 @@ struct ProcessRunner: Sendable {
         }
 
         return result
+    }
+}
+
+private final class PipeReader: @unchecked Sendable {
+    private let fileHandle: FileHandle
+    private let queue = DispatchQueue(label: "NotesBridge.PipeReader", qos: .utility)
+    private var result: Result<Data, Error>?
+
+    init(fileHandle: FileHandle) {
+        self.fileHandle = fileHandle
+    }
+
+    func start() {
+        queue.async { [fileHandle] in
+            do {
+                let data = try fileHandle.readToEnd() ?? Data()
+                self.result = .success(data)
+            } catch {
+                self.result = .failure(error)
+            }
+        }
+    }
+
+    func finish() -> Data {
+        queue.sync {
+            switch result {
+            case let .success(data):
+                return data
+            case .failure, .none:
+                return Data()
+            }
+        }
     }
 }

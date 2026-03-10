@@ -52,4 +52,43 @@ struct MarkdownTransformerTests {
         #expect(plain.contains("Hello NotesBridge"))
         #expect(plain.contains("Second line"))
     }
+
+    @Test
+    func preservesParagraphBreaksAndLineBreaks() {
+        let html = """
+        <div>First line<br>Second line</div>
+        <div><br></div>
+        <div>Third line</div>
+        <p>Fourth line</p>
+        """
+
+        let markdown = transformer.htmlToMarkdown(html)
+
+        #expect(markdown.contains("First line\nSecond line"))
+        #expect(markdown.contains("Second line\n\nThird line"))
+        #expect(markdown.contains("Third line\n\nFourth line"))
+    }
+
+    @Test
+    func preservesListsQuotesAndCodeBlocks() {
+        let html = """
+        <blockquote><div>Quoted line</div></blockquote>
+        <ul><li>One</li><li><strong>Two</strong></li></ul>
+        <pre><code>let answer = 42\nprint(answer)</code></pre>
+        """
+
+        let markdown = transformer.htmlToMarkdown(html)
+
+        #expect(markdown.contains("> Quoted line"))
+        #expect(markdown.contains("- One"))
+        #expect(markdown.contains("- **Two**"))
+        #expect(markdown.contains("```\nlet answer = 42\nprint(answer)\n```"))
+    }
+
+    @Test
+    func fallsBackToPlaintextWhenHTMLCannotBeParsed() {
+        let markdown = transformer.htmlToMarkdown("", fallbackPlaintext: "Line one\nLine two")
+
+        #expect(markdown == "Line one\nLine two")
+    }
 }

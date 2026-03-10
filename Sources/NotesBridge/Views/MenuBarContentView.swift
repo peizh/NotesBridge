@@ -1,7 +1,9 @@
+import AppKit
 import SwiftUI
 
 struct MenuBarContentView: View {
     @EnvironmentObject private var appModel: AppModel
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -41,7 +43,9 @@ struct MenuBarContentView: View {
                 }
                 .disabled(!appModel.hasVaultConfigured || appModel.isSyncing)
 
-                SettingsLink {
+                Button {
+                    openSettingsWindow()
+                } label: {
                     Label("Open Settings", systemImage: "gearshape")
                 }
             }
@@ -79,5 +83,10 @@ struct MenuBarContentView: View {
             Text(value)
                 .font(.caption)
         }
+    }
+
+    private func openSettingsWindow() {
+        NSApp.activate(ignoringOtherApps: true)
+        openWindow(id: AppWindowID.settings)
     }
 }

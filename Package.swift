@@ -12,9 +12,15 @@ let package = Package(
             targets: ["NotesBridge"]
         ),
     ],
+    dependencies: [
+        .package(url: "https://github.com/scinfu/SwiftSoup.git", exact: "2.9.6"),
+    ],
     targets: [
         .executableTarget(
-            name: "NotesBridge"
+            name: "NotesBridge",
+            dependencies: [
+                .product(name: "SwiftSoup", package: "SwiftSoup"),
+            ]
         ),
         .testTarget(
             name: "NotesBridgeTests",
