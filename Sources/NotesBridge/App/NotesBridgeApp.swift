@@ -6,9 +6,16 @@ struct NotesBridgeApp: App {
     @StateObject private var appModel = AppModel()
 
     var body: some Scene {
-        MenuBarExtra("NotesBridge", systemImage: appModel.menuBarSymbolName) {
+        MenuBarExtra {
             MenuBarContentView()
                 .environmentObject(appModel)
+        } label: {
+            MenuBarIconView(
+                symbolName: appModel.menuBarSymbolName,
+                isSyncing: appModel.isSyncing,
+                frameIndex: appModel.menuBarSyncFrameIndex
+            )
+            .frame(width: 18, height: 18)
         }
         .menuBarExtraStyle(.window)
 

@@ -148,6 +148,11 @@ struct SettingsView: View {
 
                 Section("Current Status") {
                     Text(appModel.statusMessage)
+
+                    if appModel.isSyncing {
+                        syncProgressSection
+                    }
+
                     Text("Current selection: \(appModel.selectionSummary)")
                         .foregroundStyle(.secondary)
                     Text("Slash commands: \(appModel.slashCommandsSummary)")
@@ -157,5 +162,27 @@ struct SettingsView: View {
             .formStyle(.grouped)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    @ViewBuilder
+    private var syncProgressSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let syncProgress = appModel.syncProgress {
+                ProgressView(value: syncProgress.fractionCompleted)
+                    .progressViewStyle(.linear)
+                Text(syncProgress.summaryText)
+                    .foregroundStyle(.secondary)
+
+                if let currentFolderText = syncProgress.currentFolderText {
+                    Text(currentFolderText)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                ProgressView()
+                    .progressViewStyle(.linear)
+                Text("Preparing sync progress...")
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 }

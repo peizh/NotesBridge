@@ -17,15 +17,17 @@ final class AppModel: ObservableObject {
     @Published private(set) var selectionContext: SelectionContext?
     @Published private(set) var isRefreshingFolders = false
     @Published private(set) var isSyncing = false
+    @Published private(set) var menuBarSyncFrameIndex = 0
+    @Published private(set) var syncProgress: SyncProgress?
     @Published private(set) var slashKeyboardNavigationAvailable = true
     @Published var errorMessage: String?
     @Published var statusMessage = "Ready"
 
     private let notesClient: any AppleNotesClient
     private let transformer: MarkdownTransformer
-    private let syncEngine: SyncEngine
+    private let syncEngine: any Syncing
     private let vaultClient: ObsidianVaultClient
-    private let persistence: PersistenceStore
+    private let persistence: any PersistenceStoring
     private let permissionsManager: PermissionsManager
     private let notesContextMonitor: NotesContextMonitor
     private let formattingCommandExecutor: FormattingCommandExecutor
@@ -33,15 +35,17 @@ final class AppModel: ObservableObject {
     private let slashCommandEngine: SlashCommandEngine
     private let formattingBarController: FloatingFormattingBarController
     private var syncIndex: SyncIndex
+    private var syncAnimationCancellable: AnyCancellable?
     private var cancellables: Set<AnyCancellable> = []
 
     init(
         notesClient: any AppleNotesClient = AppleNotesScriptClient(),
         transformer: MarkdownTransformer = MarkdownTransformer(),
-        syncEngine: SyncEngine = SyncEngine(),
+        syncEngine: any Syncing = SyncEngine(),
         vaultClient: ObsidianVaultClient = ObsidianVaultClient(),
-        persistence: PersistenceStore = PersistenceStore(),
-        permissionsManager: PermissionsManager = PermissionsManager()
+        persistence: any PersistenceStoring = PersistenceStore(),
+        permissionsManager: PermissionsManager = PermissionsManager(),
+        startImmediately: Bool = true
     ) {
         self.notesClient = notesClient
         self.transformer = transformer
@@ -82,7 +86,9 @@ final class AppModel: ObservableObject {
         }
 
         bindInteractionState()
-        start()
+        if startImmediately {
+            start()
+        }
     }
 
     var hasVaultConfigured: Bool {
@@ -115,7 +121,7 @@ final class AppModel: ObservableObject {
 
     var menuBarSymbolName: String {
         if isSyncing {
-            return "arrow.triangle.2.circlepath.circle.fill"
+            return "arrow.triangle.2.circlepath"
         }
         if interactionAvailability.canShowFormattingBar {
             return "text.cursor"
@@ -211,12 +217,18 @@ final class AppModel: ObservableObject {
         let syncEngine = self.syncEngine
         let settings = self.settings
         let existingRecords = self.syncIndex.records
+        let progressReporter = makeSyncProgressReporter()
 
         isSyncing = true
+        startSyncAnimation()
+        syncProgress = nil
+        errorMessage = nil
         statusMessage = "Syncing Apple Notes to Obsidian..."
 
         defer {
             isSyncing = false
+            stopSyncAnimation()
+            syncProgress = nil
         }
 
         do {
@@ -229,8 +241,20 @@ final class AppModel: ObservableObject {
                 let folders = try notesClient.fetchFolders()
                 timings.fetchFolders = Date().timeIntervalSince(fetchFoldersStart)
                 var records: [SyncRecord] = []
+                var progress = SyncProgress(
+                    completedNotes: 0,
+                    totalNotes: folders.reduce(0) { $0 + $1.noteCount },
+                    completedFolders: 0,
+                    totalFolders: folders.count,
+                    currentFolderName: nil,
+                    skippedNotes: 0
+                )
+                await progressReporter.publish(progress)
 
                 for folder in folders {
+                    progress.enterFolder(folder.displayName)
+                    await progressReporter.publish(progress)
+
                     let fetchResult = try FolderDocumentFetcher.fetchDocuments(
                         for: folder,
                         using: notesClient,
@@ -256,7 +280,13 @@ final class AppModel: ObservableObject {
                         )
                         timings.export += Date().timeIntervalSince(exportStart)
                         records.append(record)
+                        progress.markProcessedNotes()
+                        await progressReporter.publish(progress)
                     }
+
+                    progress.markSkippedNotes(fetchResult.skippedCount)
+                    progress.markCompletedFolder()
+                    await progressReporter.publish(progress)
                 }
 
                 timings.total = Date().timeIntervalSince(totalStart)
@@ -347,6 +377,30 @@ final class AppModel: ObservableObject {
         errorMessage = message
         statusMessage = message
     }
+
+    private func makeSyncProgressReporter() -> SyncProgressReporter {
+        SyncProgressReporter { [weak self] progress in
+            self?.syncProgress = progress
+        }
+    }
+
+    private func startSyncAnimation() {
+        stopSyncAnimation()
+        menuBarSyncFrameIndex = 0
+
+        syncAnimationCancellable = Timer.publish(every: 0.075, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                guard let self else { return }
+                self.menuBarSyncFrameIndex = (self.menuBarSyncFrameIndex + 1) % 12
+            }
+    }
+
+    private func stopSyncAnimation() {
+        syncAnimationCancellable?.cancel()
+        syncAnimationCancellable = nil
+        menuBarSyncFrameIndex = 0
+    }
 }
 
 private struct FullSyncResult {
@@ -399,6 +453,18 @@ private struct FolderDocumentFetchResult: Sendable {
     var skippedCount: Int = 0
 }
 
+private final class SyncProgressReporter: @unchecked Sendable {
+    private let update: @MainActor @Sendable (SyncProgress) -> Void
+
+    init(update: @escaping @MainActor @Sendable (SyncProgress) -> Void) {
+        self.update = update
+    }
+
+    func publish(_ progress: SyncProgress) async {
+        await update(progress)
+    }
+}
+
 private enum FolderDocumentFetcher {
     private static let maxBatchDocumentCount = 25
 
@@ -414,7 +480,8 @@ private enum FolderDocumentFetcher {
                 timings.fetchDocuments += Date().timeIntervalSince(batchStart)
                 return FolderDocumentFetchResult(
                     documents: sortedDocuments(documents),
-                    mode: .batch
+                    mode: .batch,
+                    skippedCount: max(0, folder.noteCount - documents.count)
                 )
             } catch {
                 timings.fetchDocuments += Date().timeIntervalSince(batchStart)

@@ -1,6 +1,13 @@
 import Foundation
 
-struct PersistenceStore: Sendable {
+protocol PersistenceStoring: Sendable {
+    func loadSettings() -> AppSettings
+    func saveSettings(_ settings: AppSettings) throws
+    func loadSyncIndex() -> SyncIndex
+    func saveSyncIndex(_ index: SyncIndex) throws
+}
+
+struct PersistenceStore: PersistenceStoring {
     private let directoryName = "NotesBridge"
 
     func loadSettings() -> AppSettings {

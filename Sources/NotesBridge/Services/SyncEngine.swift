@@ -1,6 +1,15 @@
 import Foundation
 
-struct SyncEngine: Sendable {
+protocol Syncing: Sendable {
+    func sync(
+        document: AppleNoteDocument,
+        markdown: String,
+        settings: AppSettings,
+        existingRelativePath: String?
+    ) throws -> SyncRecord
+}
+
+struct SyncEngine: Syncing {
     private let vaultClient: ObsidianVaultClient
 
     init(vaultClient: ObsidianVaultClient = ObsidianVaultClient()) {
