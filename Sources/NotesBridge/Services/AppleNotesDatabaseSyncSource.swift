@@ -83,13 +83,16 @@ struct AppleNotesDataFolderAccessStatus: Sendable {
 struct AppleNotesDatabaseSyncSource: AppleNotesSyncDataSourcing {
     private let decoder: AppleNotesNoteProtoDecoder
     private let renderer: AppleNotesMarkdownRenderer
+    private let mergeableDataDecoder: AppleNotesMergeableDataProtoDecoder
 
     init(
         decoder: AppleNotesNoteProtoDecoder = AppleNotesNoteProtoDecoder(),
-        renderer: AppleNotesMarkdownRenderer = AppleNotesMarkdownRenderer()
+        renderer: AppleNotesMarkdownRenderer = AppleNotesMarkdownRenderer(),
+        mergeableDataDecoder: AppleNotesMergeableDataProtoDecoder = AppleNotesMergeableDataProtoDecoder()
     ) {
         self.decoder = decoder
         self.renderer = renderer
+        self.mergeableDataDecoder = mergeableDataDecoder
     }
 
     func validateDataFolder(at path: String) throws -> AppleNotesDataFolderSelection {
@@ -246,6 +249,9 @@ struct AppleNotesDatabaseSyncSource: AppleNotesSyncDataSourcing {
                     documents: documentsResult.documents,
                     skippedLockedNotes: documentsResult.skippedLockedNotes,
                     skippedLockedNotesByFolder: documentsResult.skippedLockedNotesByFolder,
+                    failedTableDecodes: documentsResult.failedTableDecodes,
+                    failedScanDecodes: documentsResult.failedScanDecodes,
+                    partialScanPageFailures: documentsResult.partialScanPageFailures,
                     sourceDiagnostics: nil
                 )
                 let report = AppleNotesDatabaseCandidateReport(
@@ -856,6 +862,7 @@ private extension AppleNotesDatabaseSyncSource {
         var documents: [AppleNotesSyncDocument] = []
         var skippedLockedNotes = 0
         var skippedLockedNotesByFolder: [String: Int] = [:]
+        var renderDiagnostics = AppleNotesRenderDiagnostics()
         var folderReferenceStats = noteFolderReferenceColumns.enumerated().map { index, column in
             AppleNotesFolderReferenceStat(columnName: column, nonNullCount: 0, matchedFolderCount: 0)
         }
@@ -913,6 +920,7 @@ private extension AppleNotesDatabaseSyncSource {
                     noteReferenceMap: noteReferenceMap
                 )
             }
+            renderDiagnostics.merge(rendered.diagnostics)
 
             documents.append(
                 AppleNotesSyncDocument(
@@ -941,7 +949,10 @@ private extension AppleNotesDatabaseSyncSource {
             documents: documents,
             skippedLockedNotes: skippedLockedNotes,
             skippedLockedNotesByFolder: skippedLockedNotesByFolder,
-            folderReferenceStats: folderReferenceStats
+            folderReferenceStats: folderReferenceStats,
+            failedTableDecodes: renderDiagnostics.failedTableDecodes,
+            failedScanDecodes: renderDiagnostics.failedScanDecodes,
+            partialScanPageFailures: renderDiagnostics.partialScanPageFailures
         )
     }
 
@@ -1069,10 +1080,24 @@ private extension AppleNotesDatabaseSyncSource {
             return .inlineText("[**\(title)**](\(url))")
 
         case AppleNotesInlineAttachmentType.table.rawValue:
-            return .inlineText("\n[Apple Notes table omitted]\n")
+            return try resolveTableAttachmentReference(
+                attachmentInfo,
+                database: database,
+                schema: schema,
+                selection: selection,
+                ownerID: ownerID,
+                noteReferenceMap: noteReferenceMap
+            )
 
         case AppleNotesInlineAttachmentType.scan.rawValue:
-            return .inlineText("\n[Apple Notes scan omitted]\n")
+            return try resolveScanAttachmentReference(
+                attachmentInfo,
+                database: database,
+                schema: schema,
+                selection: selection,
+                ownerID: ownerID,
+                noteReferenceMap: noteReferenceMap
+            )
 
         case AppleNotesInlineAttachmentType.modifiedScan.rawValue,
              AppleNotesInlineAttachmentType.drawing.rawValue,
@@ -1136,6 +1161,41 @@ private extension AppleNotesDatabaseSyncSource {
         ownerID: Int64?
     ) throws -> AppleNotesSyncAttachment? {
         switch uti {
+        case AppleNotesInlineAttachmentType.scan.rawValue:
+            let row = try database.row(
+                """
+                SELECT
+                    \(schema.columnExpression("zidentifier", alias: "identifier", defaultValue: "''")),
+                    \(schema.columnExpression("zsizeheight", alias: "height", defaultValue: "0")),
+                    \(schema.columnExpression("zsizewidth", alias: "width", defaultValue: "0")),
+                    \(schema.columnExpression("zmodificationdate", alias: "modifiedAt"))
+                FROM ziccloudsyncingobject
+                WHERE z_ent = ?
+                  AND z_pk = ?
+                LIMIT 1
+                """,
+                bindings: [
+                    .int(schema.entityID(named: "ICAttachment")),
+                    .int(attachmentRowID),
+                ]
+            )
+            guard let identifier = row?.string("identifier"),
+                  let width = row?.int("width"),
+                  let height = row?.int("height")
+            else {
+                return nil
+            }
+            let sourcePath = "Previews/\(identifier)-1-\(width)x\(height)-0.jpeg"
+            return makeAttachment(
+                logicalIdentifier: "attachment-\(attachmentRowID)",
+                sourcePath: sourcePath,
+                preferredFilename: "Scan Page.jpg",
+                uti: "public.image",
+                selection: selection,
+                ownerID: ownerID,
+                modifiedAt: decodeAppleNotesTime(row?.double("modifiedAt"))
+            )
+
         case AppleNotesInlineAttachmentType.modifiedScan.rawValue:
             let row = try database.row(
                 """
@@ -1249,6 +1309,204 @@ private extension AppleNotesDatabaseSyncSource {
                 selection: selection,
                 ownerID: resolvedOwnerID,
                 modifiedAt: decodeAppleNotesTime(row?.double("modifiedAt"))
+            )
+        }
+    }
+
+    func resolveTableAttachmentReference(
+        _ attachmentInfo: AppleNotesDecodedAttachmentInfo,
+        database: SQLiteDatabase,
+        schema: AppleNotesDatabaseSchema,
+        selection: AppleNotesDataFolderSelection,
+        ownerID: Int64?,
+        noteReferenceMap: [String: AppleNotesResolvedNoteReference]
+    ) throws -> AppleNotesAttachmentResolution {
+        let row = try database.row(
+            """
+            SELECT \(schema.columnExpression("zmergeabledata1", alias: "mergeableData"))
+            FROM ziccloudsyncingobject
+            WHERE zidentifier = ?
+            LIMIT 1
+            """,
+            bindings: [.text(attachmentInfo.attachmentIdentifier)]
+        )
+        guard let mergeableData = row?.data("mergeableData") else {
+            return .fragment(
+                AppleNotesRenderedFragment(
+                    markdownTemplate: "\n**(error decoding Apple Notes table)**\n",
+                    internalLinks: [],
+                    attachments: [],
+                    isBlock: true,
+                    diagnostics: AppleNotesRenderDiagnostics(failedTableDecodes: 1)
+                )
+            )
+        }
+
+        do {
+            let decoded = try mergeableDataDecoder.decode(from: mergeableData)
+            let converter = AppleNotesTableConverter(mergeableData: decoded, renderer: renderer)
+            guard let baseFragment = try converter.renderFragment(attachmentResolver: { nestedAttachmentInfo in
+                try resolveAttachmentReference(
+                    nestedAttachmentInfo,
+                    database: database,
+                    schema: schema,
+                    selection: selection,
+                    ownerID: ownerID,
+                    noteReferenceMap: noteReferenceMap
+                )
+            }) else {
+                throw AppleNotesNoteDecodingError.invalidProtobuf
+            }
+            return .fragment(baseFragment)
+        } catch {
+            AppLog.appleNotes.error(
+                "Failed to decode Apple Notes table attachment \(attachmentInfo.attachmentIdentifier, privacy: .public): \(error.localizedDescription, privacy: .public)"
+            )
+            return .fragment(
+                AppleNotesRenderedFragment(
+                    markdownTemplate: "\n**(error decoding Apple Notes table)**\n",
+                    internalLinks: [],
+                    attachments: [],
+                    isBlock: true,
+                    diagnostics: AppleNotesRenderDiagnostics(failedTableDecodes: 1)
+                )
+            )
+        }
+    }
+
+    func resolveScanAttachmentReference(
+        _ attachmentInfo: AppleNotesDecodedAttachmentInfo,
+        database: SQLiteDatabase,
+        schema: AppleNotesDatabaseSchema,
+        selection: AppleNotesDataFolderSelection,
+        ownerID: Int64?,
+        noteReferenceMap _: [String: AppleNotesResolvedNoteReference]
+    ) throws -> AppleNotesAttachmentResolution {
+        let row = try database.row(
+            """
+            SELECT \(schema.columnExpression("zmergeabledata1", alias: "mergeableData"))
+            FROM ziccloudsyncingobject
+            WHERE zidentifier = ?
+            LIMIT 1
+            """,
+            bindings: [.text(attachmentInfo.attachmentIdentifier)]
+        )
+        guard let mergeableData = row?.data("mergeableData") else {
+            return .fragment(
+                AppleNotesRenderedFragment(
+                    markdownTemplate: "\n**(error decoding Apple Notes scan)**\n",
+                    internalLinks: [],
+                    attachments: [],
+                    isBlock: true,
+                    diagnostics: AppleNotesRenderDiagnostics(failedScanDecodes: 1)
+                )
+            )
+        }
+
+        do {
+            let decoded = try mergeableDataDecoder.decode(from: mergeableData)
+            let converter = AppleNotesScanGalleryConverter(mergeableData: decoded)
+            let pageIdentifiers = converter.pageAttachmentIdentifiers()
+            guard !pageIdentifiers.isEmpty else {
+                throw AppleNotesNoteDecodingError.invalidProtobuf
+            }
+
+            var attachments: [AppleNotesSyncAttachment] = []
+            var lines: [String] = []
+            var failedPageCount = 0
+
+            for pageIdentifier in pageIdentifiers {
+                let pageRow = try database.row(
+                    """
+                    SELECT
+                        z_pk AS pk,
+                        \(schema.columnExpression("zmedia", alias: "mediaID")),
+                        \(schema.columnExpression("ztypeuti", alias: "typeUti", defaultValue: "''"))
+                    FROM ziccloudsyncingobject
+                    WHERE zidentifier = ?
+                    LIMIT 1
+                    """,
+                    bindings: [.text(pageIdentifier)]
+                )
+                let pageAttachment: AppleNotesSyncAttachment?
+                if let attachmentRowID = pageRow?.int("pk") {
+                    pageAttachment = try resolvePhysicalAttachment(
+                        attachmentRowID: attachmentRowID,
+                        uti: AppleNotesInlineAttachmentType.scan.rawValue,
+                        database: database,
+                        schema: schema,
+                        selection: selection,
+                        ownerID: ownerID
+                    )
+                } else {
+                    pageAttachment = nil
+                }
+
+                let fallbackAttachment: AppleNotesSyncAttachment?
+                if pageAttachment == nil,
+                   let mediaID = pageRow?.int("mediaID"),
+                   let typeUti = pageRow?.string("typeUti"),
+                   !typeUti.isEmpty
+                {
+                    fallbackAttachment = try resolvePhysicalAttachment(
+                        attachmentRowID: mediaID,
+                        uti: typeUti,
+                        database: database,
+                        schema: schema,
+                        selection: selection,
+                        ownerID: ownerID
+                    )
+                } else {
+                    fallbackAttachment = nil
+                }
+
+                if let resolvedAttachment = pageAttachment ?? fallbackAttachment {
+                    attachments.append(resolvedAttachment)
+                    lines.append("{{attachment:\(resolvedAttachment.token)}}")
+                } else {
+                    failedPageCount += 1
+                    lines.append("**(error decoding scan page)**")
+                }
+            }
+
+            if attachments.isEmpty {
+                return .fragment(
+                    AppleNotesRenderedFragment(
+                        markdownTemplate: "\n**(error decoding Apple Notes scan)**\n",
+                        internalLinks: [],
+                        attachments: [],
+                        isBlock: true,
+                        diagnostics: AppleNotesRenderDiagnostics(failedScanDecodes: 1)
+                    )
+                )
+            }
+
+            var diagnostics = AppleNotesRenderDiagnostics()
+            if failedPageCount > 0 {
+                diagnostics.partialScanPageFailures = failedPageCount
+            }
+
+            return .fragment(
+                AppleNotesRenderedFragment(
+                    markdownTemplate: "\n" + lines.joined(separator: "\n") + "\n",
+                    internalLinks: [],
+                    attachments: attachments,
+                    isBlock: true,
+                    diagnostics: diagnostics
+                )
+            )
+        } catch {
+            AppLog.appleNotes.error(
+                "Failed to decode Apple Notes scan attachment \(attachmentInfo.attachmentIdentifier, privacy: .public): \(error.localizedDescription, privacy: .public)"
+            )
+            return .fragment(
+                AppleNotesRenderedFragment(
+                    markdownTemplate: "\n**(error decoding Apple Notes scan)**\n",
+                    internalLinks: [],
+                    attachments: [],
+                    isBlock: true,
+                    diagnostics: AppleNotesRenderDiagnostics(failedScanDecodes: 1)
+                )
             )
         }
     }
@@ -1565,6 +1823,9 @@ private struct AppleNotesDocumentLoadResult {
     var skippedLockedNotes: Int
     var skippedLockedNotesByFolder: [String: Int]
     var folderReferenceStats: [AppleNotesFolderReferenceStat]
+    var failedTableDecodes: Int
+    var failedScanDecodes: Int
+    var partialScanPageFailures: Int
 }
 
 struct AppleNotesFolderReferenceStat {
