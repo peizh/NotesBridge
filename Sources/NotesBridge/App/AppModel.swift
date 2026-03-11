@@ -739,6 +739,9 @@ final class AppModel: ObservableObject {
                     $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
                 }
                 diagnostics.skippedNotes = snapshot.skippedLockedNotes
+                diagnostics.failedTableDecodes = snapshot.failedTableDecodes
+                diagnostics.failedScanDecodes = snapshot.failedScanDecodes
+                diagnostics.partialScanPageFailures = snapshot.partialScanPageFailures
                 diagnostics.sourceDiagnostics = snapshot.sourceDiagnostics
                 let (exportGroups, fallbackDocumentCount) = buildExportGroups(
                     folders: folders,
@@ -1031,6 +1034,9 @@ private struct SyncDiagnostics: Sendable {
     var skippedNotes = 0
     var fallbackGroupedDocuments = 0
     var unresolvedInternalLinks = 0
+    var failedTableDecodes = 0
+    var failedScanDecodes = 0
+    var partialScanPageFailures = 0
     var sourceDiagnostics: String?
 
     var summary: String {
@@ -1049,6 +1055,18 @@ private struct SyncDiagnostics: Sendable {
 
         if unresolvedInternalLinks > 0 {
             parts.append("Left \(unresolvedInternalLinks) internal note link(s) as plain text because their targets were not exported.")
+        }
+
+        if failedTableDecodes > 0 {
+            parts.append("Failed to fully decode \(failedTableDecodes) Apple Notes table attachment(s).")
+        }
+
+        if failedScanDecodes > 0 {
+            parts.append("Failed to fully decode \(failedScanDecodes) Apple Notes scan attachment(s).")
+        }
+
+        if partialScanPageFailures > 0 {
+            parts.append("Fell back on \(partialScanPageFailures) Apple Notes scan page(s) that could not be resolved cleanly.")
         }
 
         return parts.joined(separator: " ")

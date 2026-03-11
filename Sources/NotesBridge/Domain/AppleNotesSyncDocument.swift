@@ -144,6 +144,9 @@ struct AppleNotesSyncSnapshot: Sendable {
     var documents: [AppleNotesSyncDocument]
     var skippedLockedNotes: Int
     var skippedLockedNotesByFolder: [String: Int]
+    var failedTableDecodes: Int = 0
+    var failedScanDecodes: Int = 0
+    var partialScanPageFailures: Int = 0
     var sourceDiagnostics: String? = nil
 }
 

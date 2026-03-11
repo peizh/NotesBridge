@@ -66,7 +66,7 @@ struct AppleNotesMarkdownRendererTests {
             )
         }
 
-        #expect(rendered.markdownTemplate.contains("{{attachment:image-1}}"))
+        #expect(rendered.markdownTemplate.contains("{{attachment:image-1-1}}"))
         #expect(rendered.attachments.count == 1)
         #expect(rendered.attachments.first?.preferredFilename == "image.png")
     }
@@ -142,6 +142,68 @@ struct AppleNotesMarkdownRendererTests {
         #expect(rendered.markdownTemplate == "{{note-link:journal-link}}")
         #expect(rendered.internalLinks.count == 1)
         #expect(rendered.internalLinks.first?.displayText == "9/3/2025")
+    }
+
+    @Test
+    func tableCellModeNormalizesNewlinesAndPipes() throws {
+        let note = makeNote(
+            segments: [
+                segment("Line 1\nLine 2 | Value"),
+            ]
+        )
+
+        let rendered = try renderer.render(note: note, options: .tableCell) { _ in
+            .inlineText("")
+        }
+
+        #expect(rendered.markdownTemplate == "Line 1<br>Line 2 &#124; Value")
+    }
+
+    @Test
+    func mergesRenderedFragmentsFromAttachmentResolver() throws {
+        let note = makeNote(
+            segments: [
+                AppleNotesTestSegment(
+                    fragment: "\u{FFFC}",
+                    attachmentInfo: AppleNotesDecodedAttachmentInfo(
+                        attachmentIdentifier: "table-1",
+                        typeUti: "com.apple.notes.table"
+                    )
+                ),
+            ]
+        )
+
+        let rendered = try renderer.render(note: note) { _ in
+            .fragment(
+                AppleNotesRenderedFragment(
+                    markdownTemplate: "{{note-link:child-link}} {{attachment:child-attachment}}",
+                    internalLinks: [
+                        AppleNotesSyncInternalLink(
+                            token: "child-link",
+                            targetSourceIdentifier: "TARGET-NOTE",
+                            displayText: "Roadmap"
+                        ),
+                    ],
+                    attachments: [
+                        AppleNotesSyncAttachment(
+                            token: "child-attachment",
+                            logicalIdentifier: "child-attachment",
+                            sourceURL: URL(fileURLWithPath: "/tmp/photo.png"),
+                            preferredFilename: "photo.png",
+                            renderStyle: .embed,
+                            modifiedAt: nil,
+                            fileSize: nil
+                        ),
+                    ],
+                    isBlock: true
+                )
+            )
+        }
+
+        #expect(rendered.markdownTemplate.contains("{{note-link:child-link-1}}"))
+        #expect(rendered.markdownTemplate.contains("{{attachment:child-attachment-1}}"))
+        #expect(rendered.internalLinks.count == 1)
+        #expect(rendered.attachments.count == 1)
     }
 
     private func makeNote(segments: [AppleNotesTestSegment]) -> AppleNotesDecodedNote {

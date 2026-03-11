@@ -37,12 +37,41 @@ enum AppleNotesAttachmentResolution: Sendable {
     case inlineText(String)
     case internalLink(AppleNotesSyncInternalLink)
     case attachment(AppleNotesSyncAttachment, isBlock: Bool)
+    case fragment(AppleNotesRenderedFragment)
+}
+
+struct AppleNotesRenderDiagnostics: Sendable, Equatable {
+    var failedTableDecodes = 0
+    var failedScanDecodes = 0
+    var partialScanPageFailures = 0
+
+    mutating func merge(_ other: AppleNotesRenderDiagnostics) {
+        failedTableDecodes += other.failedTableDecodes
+        failedScanDecodes += other.failedScanDecodes
+        partialScanPageFailures += other.partialScanPageFailures
+    }
+}
+
+struct AppleNotesRenderedFragment: Sendable {
+    var markdownTemplate: String
+    var internalLinks: [AppleNotesSyncInternalLink]
+    var attachments: [AppleNotesSyncAttachment]
+    var isBlock: Bool
+    var diagnostics: AppleNotesRenderDiagnostics = .init()
 }
 
 struct AppleNotesRenderedNote: Sendable {
     var markdownTemplate: String
     var internalLinks: [AppleNotesSyncInternalLink]
     var attachments: [AppleNotesSyncAttachment]
+    var diagnostics: AppleNotesRenderDiagnostics
+}
+
+struct AppleNotesMarkdownRenderOptions: Sendable {
+    var tableCellMode = false
+
+    static let standard = AppleNotesMarkdownRenderOptions()
+    static let tableCell = AppleNotesMarkdownRenderOptions(tableCellMode: true)
 }
 
 private struct AppleNotesDecodedNoteMatch {
@@ -158,7 +187,7 @@ struct AppleNotesNoteProtoDecoder {
         return nil
     }
 
-    private func decodeNoteMessage(from data: Data) throws -> AppleNotesDecodedNote {
+    func decodeNoteMessage(from data: Data) throws -> AppleNotesDecodedNote {
         var reader = ProtobufReader(data: data)
         var noteText = ""
         var attributeRuns: [AppleNotesDecodedAttributeRun] = []
@@ -291,9 +320,10 @@ private extension AppleNotesDecodedNote {
 struct AppleNotesMarkdownRenderer {
     func render(
         note: AppleNotesDecodedNote,
+        options: AppleNotesMarkdownRenderOptions = .standard,
         attachmentResolver: (AppleNotesDecodedAttachmentInfo) throws -> AppleNotesAttachmentResolution
     ) throws -> AppleNotesRenderedNote {
-        var state = RenderState()
+        var state = RenderState(options: options)
         let noteText = note.noteText
             .replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n")
@@ -312,22 +342,36 @@ struct AppleNotesMarkdownRenderer {
 
         state.finish()
         return AppleNotesRenderedNote(
-            markdownTemplate: state.output.trimmingCharacters(in: .whitespacesAndNewlines),
+            markdownTemplate: state.finalizedMarkdown,
             internalLinks: state.internalLinks,
-            attachments: state.attachments
+            attachments: state.attachments,
+            diagnostics: state.diagnostics
         )
     }
 }
 
 private extension AppleNotesMarkdownRenderer {
     struct RenderState {
+        let options: AppleNotesMarkdownRenderOptions
         var output = ""
         var internalLinks: [AppleNotesSyncInternalLink] = []
         var attachments: [AppleNotesSyncAttachment] = []
+        var diagnostics = AppleNotesRenderDiagnostics()
         var isAtLineStart = true
         var listNumber = 0
         var listIndent = 0
         var insideMonospacedBlock = false
+
+        var finalizedMarkdown: String {
+            let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard options.tableCellMode else {
+                return trimmed
+            }
+
+            return trimmed
+                .replacingOccurrences(of: "\n", with: "<br>")
+                .replacingOccurrences(of: "|", with: "&#124;")
+        }
 
         mutating func append(
             fragment: String,
@@ -394,7 +438,7 @@ private extension AppleNotesMarkdownRenderer {
                     output.append(paragraphPrefix(for: run))
                 }
                 output.append(text)
-                isAtLineStart = false
+                isAtLineStart = text.hasSuffix("\n")
 
             case let .internalLink(link):
                 if isAtLineStart && !insideMonospacedBlock {
@@ -405,34 +449,113 @@ private extension AppleNotesMarkdownRenderer {
                 isAtLineStart = false
 
             case let .attachment(attachment, isBlock):
-                attachments.append(attachment)
-                let token = "{{attachment:\(attachment.token)}}"
+                let fragment = AppleNotesRenderedFragment(
+                    markdownTemplate: "{{attachment:\(attachment.token)}}",
+                    internalLinks: [],
+                    attachments: [attachment],
+                    isBlock: isBlock
+                )
+                appendFragment(fragment, run: run)
 
-                if isBlock {
-                    if !output.isEmpty, !output.hasSuffix("\n") {
-                        output.append("\n")
-                    }
-                    if isAtLineStart && !insideMonospacedBlock {
-                        output.append(paragraphPrefix(for: run))
-                    }
-                    output.append(token)
-                    if !output.hasSuffix("\n") {
-                        output.append("\n")
-                    }
-                    isAtLineStart = true
-                } else {
-                    if isAtLineStart && !insideMonospacedBlock {
-                        output.append(paragraphPrefix(for: run))
-                    }
-                    output.append(token)
-                    isAtLineStart = false
-                }
+            case let .fragment(fragment):
+                appendFragment(fragment, run: run)
             }
         }
 
         private mutating func appendInternalLink(_ link: AppleNotesSyncInternalLink) -> String {
             internalLinks.append(link)
             return "{{note-link:\(link.token)}}"
+        }
+
+        private mutating func appendFragment(
+            _ fragment: AppleNotesRenderedFragment,
+            run: AppleNotesDecodedAttributeRun
+        ) {
+            let uniqued = uniquedFragment(fragment)
+            diagnostics.merge(uniqued.diagnostics)
+            let shouldTreatAsBlock = uniqued.isBlock && !options.tableCellMode
+
+            if shouldTreatAsBlock {
+                if !output.isEmpty, !output.hasSuffix("\n") {
+                    output.append("\n")
+                }
+                if isAtLineStart && !insideMonospacedBlock {
+                    output.append(paragraphPrefix(for: run))
+                }
+                output.append(uniqued.markdownTemplate)
+                if !output.hasSuffix("\n") {
+                    output.append("\n")
+                }
+                isAtLineStart = true
+                return
+            }
+
+            if isAtLineStart && !insideMonospacedBlock {
+                output.append(paragraphPrefix(for: run))
+            }
+            output.append(uniqued.markdownTemplate)
+            isAtLineStart = uniqued.markdownTemplate.hasSuffix("\n")
+        }
+
+        private mutating func uniquedFragment(_ fragment: AppleNotesRenderedFragment) -> AppleNotesRenderedFragment {
+            var template = fragment.markdownTemplate
+            var uniquedInternalLinks: [AppleNotesSyncInternalLink] = []
+            var uniquedAttachments: [AppleNotesSyncAttachment] = []
+
+            for link in fragment.internalLinks {
+                let newToken = uniqueInternalLinkToken(basedOn: link.token)
+                template = template.replacingOccurrences(
+                    of: "{{note-link:\(link.token)}}",
+                    with: "{{note-link:\(newToken)}}"
+                )
+                uniquedInternalLinks.append(
+                    AppleNotesSyncInternalLink(
+                        token: newToken,
+                        targetSourceIdentifier: link.targetSourceIdentifier,
+                        displayText: link.displayText
+                    )
+                )
+            }
+
+            for attachment in fragment.attachments {
+                let newToken = uniqueAttachmentToken(basedOn: attachment.token)
+                template = template.replacingOccurrences(
+                    of: "{{attachment:\(attachment.token)}}",
+                    with: "{{attachment:\(newToken)}}"
+                )
+                uniquedAttachments.append(
+                    AppleNotesSyncAttachment(
+                        token: newToken,
+                        logicalIdentifier: attachment.logicalIdentifier,
+                        sourceURL: attachment.sourceURL,
+                        preferredFilename: attachment.preferredFilename,
+                        renderStyle: attachment.renderStyle,
+                        modifiedAt: attachment.modifiedAt,
+                        fileSize: attachment.fileSize
+                    )
+                )
+            }
+
+            internalLinks.append(contentsOf: uniquedInternalLinks)
+            attachments.append(contentsOf: uniquedAttachments)
+
+            return AppleNotesRenderedFragment(
+                markdownTemplate: template,
+                internalLinks: uniquedInternalLinks,
+                attachments: uniquedAttachments,
+                isBlock: fragment.isBlock,
+                diagnostics: fragment.diagnostics
+            )
+        }
+
+        private func uniqueInternalLinkToken(basedOn token: String) -> String {
+            let sanitizedToken = token.isEmpty ? "note-link" : token
+            return "\(sanitizedToken)-\(internalLinks.count + 1)"
+        }
+
+        private func uniqueAttachmentToken(basedOn token: String) -> String {
+            let sanitizedToken = token.isEmpty ? "attachment" : token
+            return "\(sanitizedToken)-\(attachments.count + 1)"
         }
 
         private mutating func appendInternalLink(
@@ -548,12 +671,12 @@ private enum AppleNotesStyleType: Int {
     case checkbox = 103
 }
 
-private struct ProtobufField {
+struct ProtobufField {
     var number: Int
     var wireType: Int
 }
 
-private struct ProtobufReader {
+struct ProtobufReader {
     private let data: Data
     private var index = 0
 
@@ -608,7 +731,7 @@ private struct ProtobufReader {
         }
     }
 
-    private mutating func readVarint() throws -> UInt64 {
+    mutating func readVarint() throws -> UInt64 {
         var result: UInt64 = 0
         var shift: UInt64 = 0
 
@@ -630,7 +753,7 @@ private struct ProtobufReader {
     }
 }
 
-private enum Gzip {
+enum Gzip {
     static func inflate(_ data: Data) throws -> Data {
         guard !data.isEmpty else { return Data() }
 
