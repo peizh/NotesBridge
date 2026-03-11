@@ -48,17 +48,23 @@ struct AppModelSyncProgressTests {
 
         await syncTask.value
 
-        let sawInitialInboxProgress = snapshots.contains { snapshot in
+        let sawInboxProgress = snapshots.contains { snapshot in
             snapshot.currentFolderName == "Inbox"
-                && snapshot.completedNotes == 0
-                && snapshot.completedFolders == 0
+        }
+        let sawProjectsProgress = snapshots.contains { snapshot in
+            snapshot.currentFolderName == "Projects"
+        }
+        let sawNotesAdvanceBeforeFolderCompletion = snapshots.contains { snapshot in
+            snapshot.completedNotes >= 1 && snapshot.completedFolders == 0
         }
         let sawCompletedFirstFolder = snapshots.contains { snapshot in
             snapshot.completedNotes == 2 && snapshot.completedFolders == 1
         }
         #expect(snapshots.first?.totalNotes == 3)
         #expect(snapshots.first?.totalFolders == 2)
-        #expect(sawInitialInboxProgress)
+        #expect(sawInboxProgress)
+        #expect(sawProjectsProgress)
+        #expect(sawNotesAdvanceBeforeFolderCompletion)
         #expect(sawCompletedFirstFolder)
         #expect(model.syncProgress == nil)
         #expect(model.statusMessage.contains("Synced 3 note(s) across 2 folder(s)."))
