@@ -19,7 +19,7 @@ Recommended branch naming:
 
 Examples:
 
-- `codex/42-fix-scan-gallery-export`
+- `agent/42-fix-scan-gallery-export`
 - `fix-slash-menu-anchor`
 
 ## Issue Guidelines
@@ -60,6 +60,8 @@ Core type labels:
 - `refactor`
 - `docs`
 - `test`
+- `good first issue`
+- `help wanted`
 
 State / triage labels:
 
@@ -156,3 +158,15 @@ Good prompts:
 - `Implement #42 and open a PR`
 - `Read #57 and produce an implementation plan`
 - `Review PR #18 for regressions and testing gaps`
+
+## Repository Settings Checklist
+
+Keep Discussions disabled for this repository.
+
+Recommended repository settings:
+
+- Set the default branch to `main`
+- Protect `main` and require passing CI before merge
+- Enable Dependabot alerts
+- Enable secret scanning
+- Enable code scanning if available on the repository plan

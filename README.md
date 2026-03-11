@@ -1,10 +1,15 @@
 # NotesBridge
 
-[![CI](https://img.shields.io/github/actions/workflow/status/peizh/NoteBridge/ci.yml?branch=master&label=CI)](https://github.com/peizh/NoteBridge/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/peizh/NoteBridge/ci.yml?branch=main&label=CI)](https://github.com/peizh/NoteBridge/actions/workflows/ci.yml)
 [![GitHub stars](https://img.shields.io/github/stars/peizh/NoteBridge?style=social)](https://github.com/peizh/NoteBridge/stargazers)
 [![GitHub forks](https://img.shields.io/github/forks/peizh/NoteBridge?style=social)](https://github.com/peizh/NoteBridge/network/members)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 
 NotesBridge is a native macOS companion for Apple Notes. It runs as a menu bar app, adds inline editing enhancements on top of Apple Notes, and exports notes into an Obsidian vault.
+
+## Project status
+
+NotesBridge is under active development. The direct-download macOS build is the primary experience, and Apple Notes integration currently depends on local macOS permissions and direct access to the Apple Notes data container.
 
 ## What this prototype does
 
@@ -58,3 +63,7 @@ On first bundled launch, macOS may ask for Accessibility and Automation permissi
 1. Harden selection anchoring and formatting-bar placement across multiple displays and fullscreen spaces.
 2. Add a richer sync index and incremental note change tracking.
 3. Package separate direct-download and App Store deliverables from the same codebase.
+
+## License
+
+MIT. See [LICENSE](./LICENSE).

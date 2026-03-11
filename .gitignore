@@ -4,4 +4,5 @@
 xcuserdata/
 DerivedData/
 .swiftpm/configuration/registries.json
+/scripts/__pycache__/
 .netrc
