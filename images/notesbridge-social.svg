@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2560" height="1280" viewBox="0 0 2560 1280" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="204" y1="111" x2="2221" y2="1164" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0B1324"/>
+      <stop offset="0.52" stop-color="#0F2744"/>
+      <stop offset="1" stop-color="#123760"/>
+    </linearGradient>
+    <linearGradient id="card" x1="1600" y1="188" x2="2332" y2="1018" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#132C4B"/>
+      <stop offset="1" stop-color="#0B1A2C"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#F59E0B"/>
+      <stop offset="1" stop-color="#FB7185"/>
+    </linearGradient>
+    <filter id="blur" x="0" y="0" width="2560" height="1280" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="80"/>
+    </filter>
+    <filter id="shadow" x="1360" y="60" width="1040" height="1120" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="28" stdDeviation="40" flood-color="#020617" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <rect width="2560" height="1280" fill="url(#bg)"/>
+  <g opacity="0.55" filter="url(#blur)">
+    <circle cx="337" cy="210" r="250" fill="#F59E0B"/>
+    <circle cx="2010" cy="180" r="230" fill="#FB7185"/>
+    <circle cx="2082" cy="1000" r="280" fill="#38BDF8"/>
+  </g>
+
+  <g opacity="0.22">
+    <path d="M0 1010C214 867 452 804 714 821C1038 842 1239 1018 1494 1018C1750 1018 1951 886 2228 893C2372 897 2483 930 2560 962V1280H0V1010Z" fill="#0F172A"/>
+    <path d="M0 1140C170 1031 405 996 705 1036C935 1068 1131 1157 1381 1157C1648 1157 1874 1030 2156 1030C2317 1030 2451 1066 2560 1121V1280H0V1140Z" fill="#111827"/>
+  </g>
+
+  <g>
+    <rect x="164" y="154" width="108" height="108" rx="28" fill="url(#accent)"/>
+    <path d="M199 188H237C256.882 188 273 204.118 273 224V228C273 247.882 256.882 264 237 264H199C179.118 264 163 247.882 163 228V224C163 204.118 179.118 188 199 188Z" fill="#FFF7ED" opacity="0.94"/>
+    <path d="M198 211H240" stroke="#9A3412" stroke-width="10" stroke-linecap="round"/>
+    <path d="M198 242H226" stroke="#9A3412" stroke-width="10" stroke-linecap="round"/>
+  </g>
+
+  <text x="164" y="404" fill="#F8FAFC" font-size="172" font-family="SF Pro Display, Inter, Helvetica, Arial, sans-serif" font-weight="780" letter-spacing="-4">NotesBridge</text>
+  <text x="170" y="514" fill="#D6E7FF" font-size="54" font-family="SF Pro Text, Inter, Helvetica, Arial, sans-serif" font-weight="500">Apple Notes companion app for inline tools and Obsidian sync.</text>
+
+  <g font-family="SF Pro Text, Inter, Helvetica, Arial, sans-serif">
+    <rect x="164" y="620" width="380" height="62" rx="31" fill="#0F1F33" stroke="#274564"/>
+    <circle cx="222" cy="651" r="9" fill="#22C55E"/>
+    <text x="268" y="659" fill="#E2E8F0" font-size="22" font-weight="600">Native Apple Notes sync</text>
+
+    <rect x="576" y="620" width="324" height="62" rx="31" fill="#0F1F33" stroke="#274564"/>
+    <circle cx="634" cy="651" r="9" fill="#38BDF8"/>
+    <text x="680" y="659" fill="#E2E8F0" font-size="22" font-weight="600">Slash commands</text>
+
+    <rect x="932" y="620" width="468" height="62" rx="31" fill="#0F1F33" stroke="#274564"/>
+    <circle cx="990" cy="651" r="9" fill="#F59E0B"/>
+    <text x="1036" y="659" fill="#E2E8F0" font-size="22" font-weight="600">Attachments and wiki links</text>
+  </g>
+
+  <text x="166" y="788" fill="#F8FAFC" font-size="58" font-family="Georgia, Times New Roman, serif" font-weight="700">Write in Apple Notes.</text>
+  <text x="166" y="860" fill="#F8FAFC" font-size="58" font-family="Georgia, Times New Roman, serif" font-weight="700">Keep structure, links, and files in Obsidian.</text>
+
+  <g filter="url(#shadow)">
+    <rect x="1490" y="126" width="880" height="1028" rx="42" fill="url(#card)" stroke="#35537A"/>
+    <rect x="1540" y="184" width="780" height="112" rx="28" fill="#0C1E34" stroke="#29486B"/>
+    <text x="1594" y="242" fill="#F8FAFC" font-size="44" font-family="SF Pro Display, Inter, Helvetica, Arial, sans-serif" font-weight="700">Apple Notes → Obsidian</text>
+    <text x="1596" y="279" fill="#93C5FD" font-size="24" font-family="SF Pro Text, Inter, Helvetica, Arial, sans-serif">Menu bar tools • Native sync • Attachments • Internal links</text>
+
+    <rect x="1540" y="338" width="360" height="346" rx="28" fill="#F8FAFC"/>
+    <text x="1584" y="398" fill="#0F172A" font-size="38" font-family="SF Pro Display, Inter, Helvetica, Arial, sans-serif" font-weight="700">/title</text>
+    <text x="1584" y="446" fill="#64748B" font-size="24" font-family="SF Pro Text, Inter, Helvetica, Arial, sans-serif">Creates a title in Apple Notes</text>
+    <text x="1584" y="500" fill="#0F172A" font-size="24" font-family="SF Pro Text, Inter, Helvetica, Arial, sans-serif" font-weight="600">/heading</text>
+    <text x="1710" y="500" fill="#64748B" font-size="18" font-family="SF Pro Text, Inter, Helvetica, Arial, sans-serif">Section heading</text>
+    <text x="1584" y="540" fill="#0F172A" font-size="24" font-family="SF Pro Text, Inter, Helvetica, Arial, sans-serif" font-weight="600">/checklist</text>
+    <text x="1710" y="540" fill="#64748B" font-size="18" font-family="SF Pro Text, Inter, Helvetica, Arial, sans-serif">Checklist block</text>
+    <text x="1584" y="580" fill="#0F172A" font-size="24" font-family="SF Pro Text, Inter, Helvetica, Arial, sans-serif" font-weight="600">/table</text>
+    <text x="1710" y="580" fill="#64748B" font-size="18" font-family="SF Pro Text, Inter, Helvetica, Arial, sans-serif">Insert a native table</text>
+    <rect x="1584" y="616" width="232" height="44" rx="14" fill="#0F172A"/>
+    <text x="1620" y="646" fill="#F8FAFC" font-size="24" font-family="SF Pro Text, Inter, Helvetica, Arial, sans-serif" font-weight="600">Slash menu</text>
+
+    <rect x="1948" y="338" width="372" height="346" rx="28" fill="#0A1424" stroke="#29486B"/>
+    <text x="1992" y="404" fill="#F8FAFC" font-size="28" font-family="SF Pro Display, Inter, Helvetica, Arial, sans-serif" font-weight="700">Journal/2026/March</text>
+    <text x="1992" y="448" fill="#93C5FD" font-size="18" font-family="SF Pro Text, Inter, Helvetica, Arial, sans-serif">[[9-3-2025|9/3/2025]]</text>
+    <text x="1992" y="496" fill="#E2E8F0" font-size="18" font-family="SF Pro Text, Inter, Helvetica, Arial, sans-serif">Apple Notes/...</text>
+    <rect x="1992" y="548" width="280" height="14" rx="7" fill="#20324A"/>
+    <rect x="1992" y="580" width="246" height="14" rx="7" fill="#20324A"/>
+    <rect x="1992" y="612" width="300" height="14" rx="7" fill="#20324A"/>
+    <rect x="1992" y="644" width="182" height="14" rx="7" fill="#20324A"/>
+
+    <rect x="1540" y="728" width="780" height="374" rx="28" fill="#08121F" stroke="#29486B"/>
+    <text x="1584" y="792" fill="#F8FAFC" font-size="34" font-family="SF Pro Display, Inter, Helvetica, Arial, sans-serif" font-weight="700">Sync snapshot</text>
+    <text x="1584" y="838" fill="#93C5FD" font-size="24" font-family="SF Pro Text, Inter, Helvetica, Arial, sans-serif">Tables, scan galleries, and native attachments preserved</text>
+    <rect x="1584" y="888" width="692" height="18" rx="9" fill="#14283F"/>
+    <rect x="1584" y="888" width="524" height="18" rx="9" fill="url(#accent)"/>
+    <text x="1584" y="956" fill="#E2E8F0" font-size="28" font-family="SF Pro Text, Inter, Helvetica, Arial, sans-serif">426 notes • 5 folders • wiki links resolved</text>
+    <text x="1584" y="1002" fill="#CBD5E1" font-size="24" font-family="SF Pro Text, Inter, Helvetica, Arial, sans-serif">Accessibility-aware inline tools for Apple Notes</text>
+    <text x="1584" y="1044" fill="#CBD5E1" font-size="24" font-family="SF Pro Text, Inter, Helvetica, Arial, sans-serif">Obsidian-ready exports with front matter and attachment folders</text>
+  </g>
+</svg>

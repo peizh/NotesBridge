@@ -1,9 +1,13 @@
 # NotesBridge
 
+[English](./README.md) | [简体中文](./README.zh-CN.md) | [Français](./README.fr.md)
+
 [![CI](https://img.shields.io/github/actions/workflow/status/peizh/NoteBridge/ci.yml?branch=main&label=CI)](https://github.com/peizh/NoteBridge/actions/workflows/ci.yml)
 [![GitHub stars](https://img.shields.io/github/stars/peizh/NoteBridge?style=social)](https://github.com/peizh/NoteBridge/stargazers)
 [![GitHub forks](https://img.shields.io/github/forks/peizh/NoteBridge?style=social)](https://github.com/peizh/NoteBridge/network/members)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
+
+![NotesBridge social banner](./images/notesbridge-social.svg)
 
 NotesBridge is a native macOS companion for Apple Notes. It runs as a menu bar app, adds inline editing enhancements on top of Apple Notes, and exports notes into an Obsidian vault.
 
