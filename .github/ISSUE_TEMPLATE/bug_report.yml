@@ -1,0 +1,97 @@
+name: Bug report
+description: Report a regression or incorrect behavior in NotesBridge.
+title: "[Bug] "
+labels:
+  - bug
+  - needs-triage
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use one issue per problem. Include the exact behavior, a minimal repro, and what should happen instead.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What is broken?
+      placeholder: Sync succeeds but exported markdown is missing table content.
+    validations:
+      required: true
+
+  - type: textarea
+    id: current_behavior
+    attributes:
+      label: Current behavior
+      description: What happens now?
+      placeholder: Apple Notes tables export as [Apple Notes table omitted].
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected_behavior
+    attributes:
+      label: Expected behavior
+      description: What should happen instead?
+      placeholder: Apple Notes tables should export as a Markdown table in Obsidian.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro_steps
+    attributes:
+      label: Reproduction steps
+      description: Provide a minimal sequence to reproduce the bug.
+      placeholder: |
+        1. Open NotesBridge Settings
+        2. Click Sync All Notes to Obsidian
+        3. Open Apple Notes/Projects/Specs/Roadmap.md
+        4. Observe placeholder text
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: How should we verify this is fixed?
+      placeholder: |
+        - Sync exports the note without placeholder text
+        - The generated table renders correctly in Obsidian
+        - Existing tests pass and a regression test is added
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs_artifacts
+    attributes:
+      label: Logs, screenshots, sample data
+      description: Paste Current Status text, unified logs, screenshots, or file paths if available.
+      placeholder: |
+        Current Status:
+        ...
+
+        Logs:
+        ...
+
+  - type: input
+    id: version
+    attributes:
+      label: NotesBridge commit or version
+      description: Git commit hash or release version if known.
+      placeholder: faf1c98
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Sync / import
+        - Apple Notes conversion
+        - Obsidian export
+        - Slash commands / inline tools
+        - Permissions / setup
+        - UI / settings
+        - Other
+    validations:
+      required: true

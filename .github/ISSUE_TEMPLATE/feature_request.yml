@@ -1,0 +1,66 @@
+name: Feature request
+description: Propose a product or developer workflow improvement for NotesBridge.
+title: "[Feature] "
+labels:
+  - feature
+  - needs-triage
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the desired outcome, not just the implementation idea. Include clear acceptance criteria.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / context
+      description: What user or workflow problem are we solving?
+      placeholder: NotesBridge syncs scan galleries as placeholders, so imported notes lose important content.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed capability
+      description: What should NotesBridge be able to do?
+      placeholder: Export ordinary Apple Notes scan galleries as individual embedded images in Obsidian.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: What must be true for this to be complete?
+      placeholder: |
+        - Sync exports all scan pages as embeds
+        - Existing attachment behavior remains unchanged
+        - Tests cover the new conversion path
+    validations:
+      required: true
+
+  - type: textarea
+    id: non_goals
+    attributes:
+      label: Non-goals / out of scope
+      description: Explicitly list what should not be included in this work.
+      placeholder: Do not change modified scan PDF export behavior.
+
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+      description: Links to prior issues, commits, screenshots, upstream implementations, or docs.
+      placeholder: Reference obsidian-importer convert-scan.ts implementation.
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - High
+        - Medium
+        - Low
+    validations:
+      required: true
