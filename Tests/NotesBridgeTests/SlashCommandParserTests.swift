@@ -37,6 +37,16 @@ struct SlashCommandParserTests {
     }
 
     @Test
+    func menuMatchesWhenCaretIsBeforeTrailingNewline() {
+        let value = "Intro\n/\nNext"
+
+        let match = parser.menuMatch(in: value, caretLocation: 7)
+
+        #expect(match?.token.rawValue == "/")
+        #expect(match?.entries.count == SlashCommandCatalog().entries.count)
+    }
+
+    @Test
     func menuIgnoresSlashInsideWords() {
         let value = "hello/title"
 

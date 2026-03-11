@@ -16,7 +16,7 @@ struct MenuBarContentView: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                statusRow(title: "Inline", value: appModel.interactionAvailability.summary)
+                statusRow(title: "Inline", value: appModel.inlineEnhancementsSummary)
                 statusRow(title: "Slash", value: appModel.slashCommandsSummary)
                 statusRow(title: "Selection", value: appModel.selectionSummary)
                 statusRow(title: "Sync", value: "Last full sync: \(appModel.lastFullSyncLabel)")
@@ -47,6 +47,14 @@ struct MenuBarContentView: View {
                     openSettingsWindow()
                 } label: {
                     Label("Open Settings", systemImage: "gearshape")
+                }
+
+                if !appModel.isRunningBundledApp && appModel.buildFlavor.supportsInlineEnhancements {
+                    Button {
+                        appModel.relaunchAsBundledApp()
+                    } label: {
+                        Label("Relaunch as Bundled App", systemImage: "app.badge")
+                    }
                 }
             }
 

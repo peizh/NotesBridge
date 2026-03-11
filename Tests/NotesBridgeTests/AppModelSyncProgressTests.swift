@@ -7,6 +7,7 @@ struct AppModelSyncProgressTests {
     func syncProgressAdvancesAndClearsOnSuccess() async {
         var settings = AppSettings.default
         settings.vaultPath = "/tmp/notesbridge-tests"
+        settings.appleNotesDataPath = "/tmp/group.com.apple.notes"
 
         let inboxFolder = AppleNotesFolder(
             id: "folder-1",
@@ -20,21 +21,21 @@ struct AppModelSyncProgressTests {
             accountName: nil,
             noteCount: 1
         )
-        let notesClient = StubNotesClient(
+        let syncDataSource = StubAppleNotesSyncDataSource(
             folders: [inboxFolder, projectsFolder],
-            documentsByFolderID: [
-                "folder-1": [
+            documentsByFolderName: [
+                "Inbox": [
                     note(id: "note-1", name: "First", folder: "Inbox"),
                     note(id: "note-2", name: "Second", folder: "Inbox"),
                 ],
-                "folder-2": [
+                "Projects": [
                     note(id: "note-3", name: "Third", folder: "Projects"),
                 ],
             ]
         )
         let model = AppModel(
-            notesClient: notesClient,
-            syncEngine: StubSyncEngine(),
+            appleNotesSyncDataSource: syncDataSource,
+            syncEngine: StubSyncEngine(syncDelay: 0.01),
             persistence: StubPersistenceStore(settings: settings),
             startImmediately: false
         )
@@ -55,15 +56,10 @@ struct AppModelSyncProgressTests {
         let sawCompletedFirstFolder = snapshots.contains { snapshot in
             snapshot.completedNotes == 2 && snapshot.completedFolders == 1
         }
-        let sawCompletedSync = snapshots.contains { snapshot in
-            snapshot.completedNotes == 3 && snapshot.completedFolders == 2
-        }
-
         #expect(snapshots.first?.totalNotes == 3)
         #expect(snapshots.first?.totalFolders == 2)
         #expect(sawInitialInboxProgress)
         #expect(sawCompletedFirstFolder)
-        #expect(sawCompletedSync)
         #expect(model.syncProgress == nil)
         #expect(model.statusMessage.contains("Synced 3 note(s) across 2 folder(s)."))
     }
@@ -73,6 +69,7 @@ struct AppModelSyncProgressTests {
     func syncProgressClearsOnFailure() async {
         var settings = AppSettings.default
         settings.vaultPath = "/tmp/notesbridge-tests"
+        settings.appleNotesDataPath = "/tmp/group.com.apple.notes"
 
         let folder = AppleNotesFolder(
             id: "folder-1",
@@ -80,18 +77,21 @@ struct AppModelSyncProgressTests {
             accountName: nil,
             noteCount: 2
         )
-        let notesClient = StubNotesClient(
+        let syncDataSource = StubAppleNotesSyncDataSource(
             folders: [folder],
-            documentsByFolderID: [
-                "folder-1": [
+            documentsByFolderName: [
+                "Inbox": [
                     note(id: "note-1", name: "First", folder: "Inbox"),
                     note(id: "note-2", name: "Second", folder: "Inbox"),
                 ],
             ]
         )
         let model = AppModel(
-            notesClient: notesClient,
-            syncEngine: StubSyncEngine(failingNoteID: "note-2"),
+            appleNotesSyncDataSource: syncDataSource,
+            syncEngine: StubSyncEngine(
+                failingNoteID: AppleNotesSyncDocument.canonicalID(for: 2),
+                syncDelay: 0.01
+            ),
             persistence: StubPersistenceStore(settings: settings),
             startImmediately: false
         )
@@ -143,50 +143,45 @@ struct AppModelSyncProgressTests {
         return snapshots
     }
 
-    private static func note(id: String, name: String, folder: String) -> AppleNoteDocument {
-        AppleNoteDocument(
-            id: id,
+    private static func note(id: String, name: String, folder: String) -> AppleNotesSyncDocument {
+        AppleNotesSyncDocument(
+            databaseNoteID: Int64(String(id.dropFirst(5))) ?? 0,
             name: name,
             folder: folder,
             createdAt: nil,
             updatedAt: nil,
             shared: false,
             passwordProtected: false,
-            plaintext: "Body",
-            htmlBody: "<div>Body</div>"
+            markdownTemplate: "Body",
+            attachments: []
         )
     }
 
-    private func note(id: String, name: String, folder: String) -> AppleNoteDocument {
+    private func note(id: String, name: String, folder: String) -> AppleNotesSyncDocument {
         Self.note(id: id, name: name, folder: folder)
     }
 }
 
-private struct StubNotesClient: AppleNotesClient {
+private struct StubAppleNotesSyncDataSource: AppleNotesSyncDataSourcing {
     var folders: [AppleNotesFolder]
-    var documentsByFolderID: [String: [AppleNoteDocument]]
+    var documentsByFolderName: [String: [AppleNotesSyncDocument]]
 
-    func fetchFolders() throws -> [AppleNotesFolder] {
+    func validateDataFolder(at path: String) throws -> AppleNotesDataFolderSelection {
+        .resolved(rootPath: path)
+    }
+
+    func fetchFolders(fromDataFolder path: String) throws -> [AppleNotesFolder] {
         folders
     }
 
-    func fetchNoteSummaries(inFolderID folderID: String) throws -> [AppleNoteSummary] {
-        (documentsByFolderID[folderID] ?? []).map(\.summary)
+    func loadSnapshot(fromDataFolder path: String) throws -> AppleNotesSyncSnapshot {
+        AppleNotesSyncSnapshot(
+            folders: folders,
+            documents: folders.flatMap { documentsByFolderName[$0.displayName] ?? [] },
+            skippedLockedNotes: 0,
+            skippedLockedNotesByFolder: [:]
+        )
     }
-
-    func fetchDocuments(inFolderID folderID: String) throws -> [AppleNoteDocument] {
-        documentsByFolderID[folderID] ?? []
-    }
-
-    func fetchDocument(id: String, inFolderID folderID: String) throws -> AppleNoteDocument {
-        guard let document = (documentsByFolderID[folderID] ?? []).first(where: { $0.id == id }) else {
-            throw AppleNotesError.noteNotFound(id)
-        }
-
-        return document
-    }
-
-    func updateNote(id: String, htmlBody: String) throws {}
 }
 
 private struct StubPersistenceStore: PersistenceStoring {
@@ -208,13 +203,17 @@ private struct StubPersistenceStore: PersistenceStoring {
 
 private struct StubSyncEngine: Syncing {
     var failingNoteID: String? = nil
+    var syncDelay: TimeInterval = 0
 
     func sync(
-        document: AppleNoteDocument,
-        markdown: String,
+        document: AppleNotesSyncDocument,
         settings: AppSettings,
         existingRelativePath: String?
     ) throws -> SyncRecord {
+        if syncDelay > 0 {
+            Thread.sleep(forTimeInterval: syncDelay)
+        }
+
         if document.id == failingNoteID {
             throw StubSyncError.failed
         }

@@ -53,13 +53,19 @@ final class NotesContextMonitor: ObservableObject {
 
         let selectedRange = selectedRange(for: focusedElement)
         let selectedText = stringAttribute(kAXSelectedTextAttribute as CFString, from: focusedElement) ?? ""
-        let selectionRect = boundsForRange(selectedRange, in: focusedElement)
         let value = includeValue ? stringAttribute(kAXValueAttribute as CFString, from: focusedElement) : nil
+        let elementRect = frameForElement(focusedElement)
+        let selectionRect = boundsForSelectionRange(
+            selectedRange,
+            in: focusedElement,
+            valueLength: value?.utf16.count
+        )
 
         return EditingContext(
             element: focusedElement,
             selectedRange: selectedRange,
             selectedText: selectedText,
+            elementRect: elementRect,
             selectionRect: selectionRect,
             value: value
         )
@@ -70,6 +76,7 @@ final class NotesContextMonitor: ObservableObject {
 
         let notesIsFrontmost = isNotesFrontmost
         let accessibilityGranted = permissionsManager.accessibilityGranted
+        let inputMonitoringGranted = permissionsManager.inputMonitoringGranted
         var editableFocus = false
         var nextSelectionContext: SelectionContext?
 
@@ -95,6 +102,7 @@ final class NotesContextMonitor: ObservableObject {
         availability = InteractionAvailability(
             buildFlavor: availability.buildFlavor,
             accessibilityGranted: accessibilityGranted,
+            inputMonitoringGranted: inputMonitoringGranted,
             notesIsFrontmost: notesIsFrontmost,
             editableFocus: editableFocus,
             inlineEnhancementsEnabled: settings.enableInlineEnhancements,
@@ -143,6 +151,70 @@ final class NotesContextMonitor: ObservableObject {
         return value as? String
     }
 
+    private func frameForElement(_ element: AXUIElement) -> CGRect? {
+        if let position = pointAttribute(kAXPositionAttribute as CFString, from: element),
+           let size = sizeAttribute(kAXSizeAttribute as CFString, from: element)
+        {
+            return CGRect(origin: position, size: size)
+        }
+
+        return rectAttribute("AXFrame" as CFString, from: element)
+    }
+
+    private func rectAttribute(_ attribute: CFString, from element: AXUIElement) -> CGRect? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute, &value) == .success,
+              let value
+        else {
+            return nil
+        }
+
+        let axValue = unsafeDowncast(value, to: AXValue.self)
+        var rect = CGRect.zero
+        guard AXValueGetType(axValue) == .cgRect,
+              AXValueGetValue(axValue, .cgRect, &rect)
+        else {
+            return nil
+        }
+        return rect
+    }
+
+    private func pointAttribute(_ attribute: CFString, from element: AXUIElement) -> CGPoint? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute, &value) == .success,
+              let value
+        else {
+            return nil
+        }
+
+        let axValue = unsafeDowncast(value, to: AXValue.self)
+        var point = CGPoint.zero
+        guard AXValueGetType(axValue) == .cgPoint,
+              AXValueGetValue(axValue, .cgPoint, &point)
+        else {
+            return nil
+        }
+        return point
+    }
+
+    private func sizeAttribute(_ attribute: CFString, from element: AXUIElement) -> CGSize? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute, &value) == .success,
+              let value
+        else {
+            return nil
+        }
+
+        let axValue = unsafeDowncast(value, to: AXValue.self)
+        var size = CGSize.zero
+        guard AXValueGetType(axValue) == .cgSize,
+              AXValueGetValue(axValue, .cgSize, &size)
+        else {
+            return nil
+        }
+        return size
+    }
+
     private func selectedRange(for element: AXUIElement) -> NSRange {
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &value) == .success,
@@ -160,6 +232,51 @@ final class NotesContextMonitor: ObservableObject {
         }
 
         return NSRange(location: range.location, length: range.length)
+    }
+
+    private func boundsForSelectionRange(
+        _ range: NSRange,
+        in element: AXUIElement,
+        valueLength: Int?
+    ) -> CGRect? {
+        if let bounds = boundsForRange(range, in: element) {
+            return bounds
+        }
+
+        guard range.length == 0,
+              let fallbackRange = fallbackAnchorRange(for: range, valueLength: valueLength),
+              let fallbackBounds = boundsForRange(fallbackRange, in: element)
+        else {
+            return nil
+        }
+
+        if fallbackRange.location < range.location {
+            return CGRect(
+                x: fallbackBounds.maxX,
+                y: fallbackBounds.minY,
+                width: 1,
+                height: fallbackBounds.height
+            )
+        }
+
+        return CGRect(
+            x: fallbackBounds.minX,
+            y: fallbackBounds.minY,
+            width: 1,
+            height: fallbackBounds.height
+        )
+    }
+
+    private func fallbackAnchorRange(for range: NSRange, valueLength: Int?) -> NSRange? {
+        if range.location > 0 {
+            return NSRange(location: range.location - 1, length: 1)
+        }
+
+        guard let valueLength, valueLength > 0, range.location < valueLength else {
+            return nil
+        }
+
+        return NSRange(location: range.location, length: 1)
     }
 
     private func boundsForRange(_ range: NSRange, in element: AXUIElement) -> CGRect? {
@@ -196,6 +313,7 @@ struct EditingContext {
     var element: AXUIElement
     var selectedRange: NSRange
     var selectedText: String
+    var elementRect: CGRect?
     var selectionRect: CGRect?
     var value: String?
 }

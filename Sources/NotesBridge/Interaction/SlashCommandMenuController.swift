@@ -5,22 +5,31 @@ import SwiftUI
 final class SlashCommandMenuController {
     private let onHoverIndex: (Int) -> Void
     private let onSelectIndex: (Int) -> Void
+    private let onFrameUpdated: (CGRect) -> Void
     private var panel: NSPanel?
     private var hostingController: NSHostingController<SlashCommandMenuView>?
 
     init(
         onHoverIndex: @escaping (Int) -> Void,
-        onSelectIndex: @escaping (Int) -> Void
+        onSelectIndex: @escaping (Int) -> Void,
+        onFrameUpdated: @escaping (CGRect) -> Void
     ) {
         self.onHoverIndex = onHoverIndex
         self.onSelectIndex = onSelectIndex
+        self.onFrameUpdated = onFrameUpdated
     }
 
     func update(entries: [SlashCommandEntry], selectedIndex: Int, anchorRect: CGRect?) {
         let panel = ensurePanel()
         hostingController?.rootView = rootView(entries: entries, selectedIndex: selectedIndex)
+        hostingController?.view.layoutSubtreeIfNeeded()
+        panel.contentView?.layoutSubtreeIfNeeded()
 
-        let size = hostingController?.view.fittingSize ?? CGSize(width: 320, height: 120)
+        let fittedSize = hostingController?.view.fittingSize ?? CGSize(width: 320, height: 120)
+        let size = CGSize(
+            width: max(320, fittedSize.width),
+            height: max(44, fittedSize.height)
+        )
         let anchorRect = anchorRect.map(convertAccessibilityRectToAppKit) ?? CGRect(origin: NSEvent.mouseLocation, size: .zero)
         let targetScreen = screen(containing: anchorRect) ?? NSScreen.main
         let visibleFrame = targetScreen?.visibleFrame ?? NSScreen.screens.reduce(CGRect.null) { partialResult, screen in
@@ -30,6 +39,7 @@ final class SlashCommandMenuController {
 
         panel.setFrame(CGRect(origin: origin, size: size), display: true)
         panel.orderFrontRegardless()
+        onFrameUpdated(panel.frame)
     }
 
     func hide() {

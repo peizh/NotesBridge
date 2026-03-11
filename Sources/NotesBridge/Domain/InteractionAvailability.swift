@@ -3,6 +3,7 @@ import Foundation
 struct InteractionAvailability: Equatable, Sendable {
     var buildFlavor: BuildFlavor
     var accessibilityGranted: Bool
+    var inputMonitoringGranted: Bool
     var notesIsFrontmost: Bool
     var editableFocus: Bool
     var inlineEnhancementsEnabled: Bool
@@ -14,6 +15,7 @@ struct InteractionAvailability: Equatable, Sendable {
         InteractionAvailability(
             buildFlavor: buildFlavor,
             accessibilityGranted: false,
+            inputMonitoringGranted: false,
             notesIsFrontmost: false,
             editableFocus: false,
             inlineEnhancementsEnabled: false,

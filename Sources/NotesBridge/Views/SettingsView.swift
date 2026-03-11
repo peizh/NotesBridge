@@ -7,6 +7,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 20) {
             Text("NotesBridge Settings")
                 .font(.largeTitle.weight(.semibold))
+                .accessibilityIdentifier("settings.title")
 
             Form {
                 Section("Distribution") {
@@ -23,9 +24,19 @@ struct SettingsView: View {
                 }
 
                 Section("Permissions") {
+                    LabeledContent("Launch Mode") {
+                        Text(appModel.isRunningBundledApp ? "Bundled App" : "Command-line build")
+                            .foregroundStyle(appModel.isRunningBundledApp ? .green : .orange)
+                    }
+
                     LabeledContent("Accessibility") {
                         Text(appModel.interactionAvailability.accessibilityGranted ? "Granted" : "Required")
                             .foregroundStyle(appModel.interactionAvailability.accessibilityGranted ? .green : .orange)
+                    }
+
+                    LabeledContent("Input Monitoring") {
+                        Text(appModel.interactionAvailability.inputMonitoringGranted ? "Granted" : "Optional for slash menu keyboard navigation")
+                            .foregroundStyle(appModel.interactionAvailability.inputMonitoringGranted ? .green : .secondary)
                     }
 
                     HStack {
@@ -39,8 +50,36 @@ struct SettingsView: View {
                         }
                     }
 
-                    Text(appModel.interactionAvailability.summary)
+                    if appModel.isRunningBundledApp {
+                        Button("Reveal NotesBridge App in Finder") {
+                            appModel.revealCurrentAppInFinder()
+                        }
+                    }
+
+                    HStack {
+                        Button("Request Input Monitoring Permission") {
+                            appModel.requestInputMonitoringPermission()
+                        }
+                        .disabled(!appModel.buildFlavor.supportsInlineEnhancements)
+
+                        Button("Open Input Monitoring Settings") {
+                            appModel.openInputMonitoringSettings()
+                        }
+                    }
+
+                    if !appModel.isRunningBundledApp && appModel.buildFlavor.supportsInlineEnhancements {
+                        Button("Relaunch as Bundled App") {
+                            appModel.relaunchAsBundledApp()
+                        }
+                    }
+
+                    Text(appModel.inlineEnhancementsSummary)
                         .foregroundStyle(.secondary)
+
+                    if appModel.isRunningBundledApp && !appModel.interactionAvailability.accessibilityGranted {
+                        Text("If NotesBridge is already checked in Accessibility but still shows Required here, remove it and add the current NotesBridge.app bundle again.")
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 Section("Inline Enhancements") {
@@ -84,7 +123,7 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
 
                     if appModel.settings.enableSlashCommands && !appModel.slashKeyboardNavigationAvailable {
-                        Text("Keyboard slash navigation is unavailable. Enable Input Monitoring for NotesBridge in Privacy & Security, or use the mouse and exact command plus Space.")
+                        Text("Keyboard slash navigation is unavailable. Enable Input Monitoring for NotesBridge in Privacy & Security, or use the mouse.")
                             .foregroundStyle(.secondary)
                     }
 
@@ -102,11 +141,13 @@ struct SettingsView: View {
                         Button("Choose Vault") {
                             appModel.chooseVaultDirectory()
                         }
+                        .accessibilityIdentifier("settings.chooseVault")
 
                         Button("Reveal in Finder") {
                             appModel.revealVault()
                         }
                         .disabled(!appModel.hasVaultConfigured)
+                        .accessibilityIdentifier("settings.revealVault")
                     }
 
                     TextField(
@@ -116,6 +157,53 @@ struct SettingsView: View {
                             set: { appModel.settings.exportFolderName = $0 }
                         )
                     )
+                }
+
+                Section("Attachments") {
+                    Toggle(
+                        "Use Obsidian attachment folder from .obsidian/app.json",
+                        isOn: Binding(
+                            get: { appModel.settings.useObsidianAttachmentFolder },
+                            set: { appModel.settings.useObsidianAttachmentFolder = $0 }
+                        )
+                    )
+
+                    TextField(
+                        "Default Attachment Folder",
+                        text: Binding(
+                            get: { appModel.settings.attachmentFolderName },
+                            set: { appModel.settings.attachmentFolderName = $0 }
+                        )
+                    )
+
+                    LabeledContent("Resolved Folder") {
+                        Text(appModel.attachmentStorageBasePath)
+                    }
+
+                    Text(appModel.attachmentStorageSourceDescription)
+                        .foregroundStyle(.secondary)
+
+                    if let attachmentStorageWarning = appModel.attachmentStorageWarning {
+                        Text(attachmentStorageWarning)
+                            .foregroundStyle(.orange)
+                    }
+
+                    Text("Apple Notes attachments are stored in one shared root and keep the exported folder hierarchy underneath it.")
+                        .foregroundStyle(.secondary)
+                }
+
+                Section("Apple Notes Data") {
+                    LabeledContent("Folder") {
+                        Text(appModel.settings.appleNotesDataPath ?? "Not configured")
+                            .foregroundStyle(appModel.hasAppleNotesDataFolderConfigured ? .primary : .secondary)
+                    }
+
+                    Button("Choose Apple Notes Data Folder") {
+                        appModel.chooseAppleNotesDataFolder()
+                    }
+
+                    Text("Choose the macOS Apple Notes container folder named group.com.apple.notes so NotesBridge can read NoteStore.sqlite and native attachments.")
+                        .foregroundStyle(.secondary)
                 }
 
                 Section("Indexing & Sync") {
@@ -136,6 +224,7 @@ struct SettingsView: View {
                             }
                         }
                         .disabled(appModel.isRefreshingFolders)
+                        .accessibilityIdentifier("settings.refreshFolders")
 
                         Button(appModel.isSyncing ? "Syncing..." : "Sync All Notes to Obsidian") {
                             Task {
@@ -143,11 +232,13 @@ struct SettingsView: View {
                             }
                         }
                         .disabled(!appModel.hasVaultConfigured || appModel.isSyncing)
+                        .accessibilityIdentifier("settings.syncAllNotes")
                     }
                 }
 
                 Section("Current Status") {
                     Text(appModel.statusMessage)
+                        .accessibilityIdentifier("settings.currentStatus")
 
                     if appModel.isSyncing {
                         syncProgressSection
@@ -157,6 +248,20 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                     Text("Slash commands: \(appModel.slashCommandsSummary)")
                         .foregroundStyle(.secondary)
+
+                    if !appModel.slashDiagnostics.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Slash diagnostics")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                            ForEach(Array(appModel.slashDiagnostics.enumerated()), id: \.offset) { _, line in
+                                Text(line)
+                                    .font(.system(.caption, design: .monospaced))
+                                    .foregroundStyle(.secondary)
+                                    .textSelection(.enabled)
+                            }
+                        }
+                    }
                 }
             }
             .formStyle(.grouped)
@@ -172,10 +277,12 @@ struct SettingsView: View {
                     .progressViewStyle(.linear)
                 Text(syncProgress.summaryText)
                     .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("settings.syncProgressSummary")
 
                 if let currentFolderText = syncProgress.currentFolderText {
                     Text(currentFolderText)
                         .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("settings.syncProgressCurrentFolder")
                 }
             } else {
                 ProgressView()

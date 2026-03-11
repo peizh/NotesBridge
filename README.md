@@ -9,7 +9,7 @@ NotesBridge is a native macOS companion for Apple Notes. It runs as a menu bar a
 - Shows a floating formatting bar above selected text in supported builds.
 - Converts line-start markdown/list triggers into native Apple Notes formatting commands.
 - Supports slash commands with inline exact-match execution and a floating suggestions menu.
-- Syncs Apple Notes into an Obsidian vault with front matter metadata.
+- Syncs Apple Notes into an Obsidian vault with front matter metadata and native attachment export.
 
 ## Product constraints
 
@@ -21,15 +21,33 @@ The current implementation is intentionally conservative:
 - The App Store flavor can be simulated by launching with `NOTESBRIDGE_APPSTORE=1`, which disables inline Apple Notes enhancements and leaves settings/sync features active.
 - Apple Notes -> Obsidian is still the primary sync direction.
 - Slash command keyboard navigation may require Input Monitoring; if interception is unavailable, exact commands plus space and mouse-click selection still work.
+- Full-note sync prompts for the macOS `group.com.apple.notes` data folder so NotesBridge can read the Apple Notes database and attachment files directly.
 
 ## Build and run
 
 ```bash
-swift build
+./scripts/run-bundled-app.sh
+```
+
+This is the recommended development entrypoint. It builds the SwiftPM executable, wraps it into a signed `NotesBridge.app`, and launches the bundled app from `~/Library/Application Support/NotesBridge/NotesBridge.app`.
+
+The bundled app now uses a stable designated requirement so Accessibility and Input Monitoring can stay attached across rebuilds. If you previously granted an older NotesBridge build and the app still shows `Required`, remove the old entry in System Settings once and add the current bundled app again.
+
+For quick non-bundled runs you can still use:
+
+```bash
 swift run
 ```
 
-On first launch, macOS may ask for Accessibility and Automation permissions so NotesBridge can watch Apple Notes and sync its content.
+But `swift run` launches a bare executable, so macOS permission flows that depend on a real app bundle, especially Input Monitoring for slash menu keyboard navigation, will not behave correctly there.
+
+If you only want to rebuild the `.app` without launching it:
+
+```bash
+./scripts/run-bundled-app.sh --build-only
+```
+
+On first bundled launch, macOS may ask for Accessibility and Automation permissions so NotesBridge can watch Apple Notes and sync its content. The first full sync also asks you to choose `~/Library/Group Containers/group.com.apple.notes` so the app can read NoteStore.sqlite and binary attachments.
 
 ## Suggested next steps
 

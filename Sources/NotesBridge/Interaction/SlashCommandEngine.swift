@@ -7,6 +7,7 @@ final class SlashCommandEngine {
     private let executor: FormattingCommandExecutor
     private let parser = SlashCommandParser()
     var onKeyboardNavigationAvailabilityChanged: ((Bool) -> Void)?
+    var onDiagnosticsChanged: (([String]) -> Void)?
 
     private lazy var menuController = SlashCommandMenuController(
         onHoverIndex: { [weak self] index in
@@ -14,6 +15,9 @@ final class SlashCommandEngine {
         },
         onSelectIndex: { [weak self] index in
             self?.commitSelection(at: index)
+        },
+        onFrameUpdated: { [weak self] frame in
+            self?.recordDiagnostic("menu frame: \(Self.describe(rect: frame))")
         }
     )
 
@@ -29,6 +33,7 @@ final class SlashCommandEngine {
     private var selectedIndex = 0
     private var currentEditingContext: EditingContext?
     private var keyboardNavigationAvailable = true
+    private var diagnostics: [String] = []
 
     init(contextMonitor: NotesContextMonitor, executor: FormattingCommandExecutor) {
         self.contextMonitor = contextMonitor
@@ -46,7 +51,7 @@ final class SlashCommandEngine {
 
         globalMouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
             Task { @MainActor in
-                self?.scheduleEvaluation(triggeredBySpace: false, delay: .milliseconds(120))
+                self?.scheduleEvaluation(triggeredBySpace: false, preview: nil)
             }
         }
     }
@@ -69,59 +74,104 @@ final class SlashCommandEngine {
 
     private func handleKeyDown(_ event: NSEvent) {
         guard contextMonitor.availability.canRunSlashCommands else {
+            recordDiagnostic(
+                "keydown ignored: canRun=false frontmost=\(contextMonitor.availability.notesIsFrontmost) editable=\(contextMonitor.availability.editableFocus)"
+            )
             hideMenu()
             return
         }
 
+        recordDiagnostic(
+            "keydown chars=\(event.characters ?? "<nil>") keyCode=\(event.keyCode) caret-eval scheduled"
+        )
+
         guard event.modifierFlags.intersection([.command, .control, .option]).isEmpty else {
-            scheduleEvaluation(triggeredBySpace: false, delay: .milliseconds(40))
+            scheduleEvaluation(triggeredBySpace: false, preview: nil)
             return
         }
 
         let triggeredBySpace = event.characters == " "
-        let delay: Duration = triggeredBySpace ? .milliseconds(55) : .milliseconds(40)
-        scheduleEvaluation(triggeredBySpace: triggeredBySpace, delay: delay)
+        scheduleEvaluation(
+            triggeredBySpace: triggeredBySpace,
+            preview: KeyEventPreview(characters: event.characters, keyCode: event.keyCode)
+        )
     }
 
-    private func scheduleEvaluation(triggeredBySpace: Bool, delay: Duration) {
+    private func scheduleEvaluation(triggeredBySpace: Bool, preview: KeyEventPreview? = nil) {
         pendingEvaluation?.cancel()
         pendingEvaluation = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: delay)
-            self?.evaluateState(triggeredBySpace: triggeredBySpace)
+            let delays: [Duration] = triggeredBySpace
+                ? [.milliseconds(70)]
+                : [.milliseconds(40), .milliseconds(120), .milliseconds(200)]
+
+            for (index, delay) in delays.enumerated() {
+                try? await Task.sleep(for: delay)
+                guard !Task.isCancelled else { return }
+
+                let didMatch = self?.evaluateState(
+                    triggeredBySpace: triggeredBySpace,
+                    preview: index == 0 ? preview : nil
+                ) ?? false
+                if triggeredBySpace || didMatch {
+                    return
+                }
+            }
         }
     }
 
-    private func evaluateState(triggeredBySpace: Bool) {
+    @discardableResult
+    private func evaluateState(triggeredBySpace: Bool, preview: KeyEventPreview?) -> Bool {
         guard contextMonitor.availability.canRunSlashCommands,
               let snapshot = contextMonitor.editingSnapshot(includeValue: true),
-              snapshot.selectedRange.length == 0,
               let value = snapshot.value
         else {
+            recordDiagnostic("snapshot unavailable for slash evaluation")
             hideMenu()
-            return
+            return false
         }
 
-        if triggeredBySpace,
-           let commitMatch = parser.commitMatchBeforeSpace(in: value, caretLocation: snapshot.selectedRange.location)
-        {
-            hideMenu()
-            Task {
-                await executor.applySlashCommand(
-                    replacementRange: commitMatch.replacementRange,
-                    command: commitMatch.entry.command,
-                    in: snapshot
-                )
-            }
-            return
+        if let directResult = evaluateSnapshot(
+            snapshot: snapshot,
+            value: value,
+            selectedRange: snapshot.selectedRange,
+            triggeredBySpace: triggeredBySpace
+        ) {
+            recordDiagnostic(
+                "evaluated current value caret=\(snapshot.selectedRange.location) len=\(snapshot.selectedRange.length) suffix=\(Self.describe(value: value, caret: snapshot.selectedRange.location))"
+            )
+            return directResult
         }
 
-        presentMenuIfNeeded(snapshot: snapshot, value: value)
+        let previewState = previewTextState(
+            for: snapshot,
+            currentValue: value,
+            preview: preview
+        )
+        guard previewState.value != value || !NSEqualRanges(previewState.selectedRange, snapshot.selectedRange) else {
+            recordDiagnostic(
+                "no slash match caret=\(snapshot.selectedRange.location) suffix=\(Self.describe(value: value, caret: snapshot.selectedRange.location))"
+            )
+            hideMenu()
+            return false
+        }
+
+        let matched = evaluateSnapshot(
+            snapshot: snapshot,
+            value: previewState.value,
+            selectedRange: previewState.selectedRange,
+            triggeredBySpace: triggeredBySpace
+        ) ?? false
+        recordDiagnostic(
+            "evaluated preview caret=\(previewState.selectedRange.location) suffix=\(Self.describe(value: previewState.value, caret: previewState.selectedRange.location))"
+        )
+        return matched
     }
 
-    private func presentMenuIfNeeded(snapshot: EditingContext, value: String) {
-        guard let menuMatch = parser.menuMatch(in: value, caretLocation: snapshot.selectedRange.location) else {
+    @discardableResult
+    private func presentMenuIfNeeded(snapshot: EditingContext, value: String, caretLocation: Int) -> Bool {
+        guard let menuMatch = parser.menuMatch(in: value, caretLocation: caretLocation) else {
             hideMenu()
-            return
+            return false
         }
 
         currentEditingContext = snapshot
@@ -138,13 +188,18 @@ final class SlashCommandEngine {
         menuController.update(
             entries: menuMatch.entries,
             selectedIndex: selectedIndex,
-            anchorRect: snapshot.selectionRect
+            anchorRect: menuAnchorRect(for: snapshot)
+        )
+        recordDiagnostic(
+            "menu update entries=\(menuMatch.entries.count) selected=\(selectedIndex) anchor=\(Self.describe(rect: menuAnchorRect(for: snapshot)))"
         )
         startRefreshTimer()
         updateKeyboardNavigationAvailability(keyboardInterceptor.start())
+        return true
     }
 
     private func hideMenu() {
+        recordDiagnostic("menu hidden")
         menuMatch = nil
         currentEditingContext = nil
         selectedIndex = 0
@@ -158,7 +213,7 @@ final class SlashCommandEngine {
 
         let timer = Timer(timeInterval: 0.2, repeats: true) { [weak self] _ in
             Task { @MainActor in
-                self?.evaluateState(triggeredBySpace: false)
+                self?.evaluateState(triggeredBySpace: false, preview: nil)
             }
         }
         RunLoop.main.add(timer, forMode: .common)
@@ -179,14 +234,14 @@ final class SlashCommandEngine {
             menuController.update(
                 entries: menuMatch.entries,
                 selectedIndex: selectedIndex,
-                anchorRect: currentEditingContext?.selectionRect
+                anchorRect: currentEditingContext.flatMap(menuAnchorRect)
             )
         case .moveDown:
             selectedIndex = (selectedIndex + 1) % menuMatch.entries.count
             menuController.update(
                 entries: menuMatch.entries,
                 selectedIndex: selectedIndex,
-                anchorRect: currentEditingContext?.selectionRect
+                anchorRect: currentEditingContext.flatMap(menuAnchorRect)
             )
         case .commit:
             commitSelection(at: selectedIndex)
@@ -201,7 +256,7 @@ final class SlashCommandEngine {
         menuController.update(
             entries: menuMatch.entries,
             selectedIndex: selectedIndex,
-            anchorRect: currentEditingContext?.selectionRect
+            anchorRect: currentEditingContext.flatMap(menuAnchorRect)
         )
     }
 
@@ -230,6 +285,164 @@ final class SlashCommandEngine {
     private func updateKeyboardNavigationAvailability(_ isAvailable: Bool) {
         guard keyboardNavigationAvailable != isAvailable else { return }
         keyboardNavigationAvailable = isAvailable
+        recordDiagnostic("keyboard navigation available=\(isAvailable)")
         onKeyboardNavigationAvailabilityChanged?(isAvailable)
     }
+
+    private func evaluateSnapshot(
+        snapshot: EditingContext,
+        value: String,
+        selectedRange: NSRange,
+        triggeredBySpace: Bool
+    ) -> Bool? {
+        guard selectedRange.length == 0 else {
+            hideMenu()
+            return false
+        }
+
+        if triggeredBySpace,
+           let commitMatch = parser.commitMatchBeforeSpace(
+            in: value,
+            caretLocation: selectedRange.location
+           )
+        {
+            hideMenu()
+            Task {
+                await executor.applySlashCommand(
+                    replacementRange: commitMatch.replacementRange,
+                    command: commitMatch.entry.command,
+                    in: snapshot
+                )
+            }
+            return true
+        }
+
+        if presentMenuIfNeeded(snapshot: snapshot, value: value, caretLocation: selectedRange.location) {
+            return true
+        }
+
+        return nil
+    }
+
+    private func menuAnchorRect(for snapshot: EditingContext) -> CGRect? {
+        if let selectionRect = snapshot.selectionRect {
+            return selectionRect
+        }
+
+        guard let elementRect = snapshot.elementRect else {
+            return nil
+        }
+
+        return CGRect(
+            x: elementRect.minX + 24,
+            y: elementRect.minY + 18,
+            width: 1,
+            height: min(24, max(16, elementRect.height))
+        )
+    }
+
+    private func previewTextState(
+        for snapshot: EditingContext,
+        currentValue: String,
+        preview: KeyEventPreview?
+    ) -> PreviewTextState {
+        guard let preview else {
+            return PreviewTextState(value: currentValue, selectedRange: snapshot.selectedRange)
+        }
+
+        let currentNSString = currentValue as NSString
+        let clampedSelection = clamp(range: snapshot.selectedRange, toUTF16Length: currentNSString.length)
+
+        if preview.keyCode == 51 {
+            return previewDeletingBackward(in: currentNSString, selectedRange: clampedSelection)
+        }
+
+        guard let characters = preview.characters,
+              isInsertablePreviewText(characters)
+        else {
+            return PreviewTextState(value: currentValue, selectedRange: clampedSelection)
+        }
+
+        let replacementLength = (characters as NSString).length
+        let nextValue = currentNSString.replacingCharacters(in: clampedSelection, with: characters)
+        return PreviewTextState(
+            value: nextValue,
+            selectedRange: NSRange(location: clampedSelection.location + replacementLength, length: 0)
+        )
+    }
+
+    private func previewDeletingBackward(in value: NSString, selectedRange: NSRange) -> PreviewTextState {
+        if selectedRange.length > 0 {
+            let nextValue = value.replacingCharacters(in: selectedRange, with: "")
+            return PreviewTextState(
+                value: nextValue,
+                selectedRange: NSRange(location: selectedRange.location, length: 0)
+            )
+        }
+
+        guard selectedRange.location > 0 else {
+            return PreviewTextState(value: value as String, selectedRange: selectedRange)
+        }
+
+        let deletionRange = NSRange(location: selectedRange.location - 1, length: 1)
+        let nextValue = value.replacingCharacters(in: deletionRange, with: "")
+        return PreviewTextState(
+            value: nextValue,
+            selectedRange: NSRange(location: deletionRange.location, length: 0)
+        )
+    }
+
+    private func clamp(range: NSRange, toUTF16Length length: Int) -> NSRange {
+        let location = min(max(0, range.location), length)
+        let maxLength = max(0, length - location)
+        let clampedLength = min(max(0, range.length), maxLength)
+        return NSRange(location: location, length: clampedLength)
+    }
+
+    private func isInsertablePreviewText(_ characters: String) -> Bool {
+        guard !characters.isEmpty else { return false }
+        return characters.unicodeScalars.allSatisfy { scalar in
+            scalar == " " || !CharacterSet.controlCharacters.contains(scalar)
+        }
+    }
+
+    private func recordDiagnostic(_ message: String) {
+        guard diagnostics.last != message else { return }
+        diagnostics.append(message)
+        if diagnostics.count > 8 {
+            diagnostics.removeFirst(diagnostics.count - 8)
+        }
+        onDiagnosticsChanged?(diagnostics)
+    }
+
+    private static func describe(value: String, caret: Int) -> String {
+        let string = value as NSString
+        let safeCaret = min(max(0, caret), string.length)
+        let start = max(0, safeCaret - 20)
+        let length = min(string.length - start, 40)
+        let snippet = string.substring(with: NSRange(location: start, length: length))
+            .replacingOccurrences(of: "\n", with: "\\n")
+        return "\"\(snippet)\"@\(safeCaret)"
+    }
+
+    private static func describe(rect: CGRect?) -> String {
+        guard let rect else { return "nil" }
+        return String(
+            format: "(x:%.1f y:%.1f w:%.1f h:%.1f)",
+            rect.origin.x,
+            rect.origin.y,
+            rect.size.width,
+            rect.size.height
+        )
+    }
+}
+
+private struct KeyEventPreview {
+    var characters: String?
+    var keyCode: UInt16
+}
+
+private struct PreviewTextState {
+    var value: String
+    var selectedRange: NSRange
 }

@@ -5,6 +5,7 @@ import Foundation
 @MainActor
 final class PermissionsManager: ObservableObject {
     @Published private(set) var accessibilityGranted = false
+    @Published private(set) var inputMonitoringGranted = false
 
     init() {
         refresh()
@@ -12,6 +13,7 @@ final class PermissionsManager: ObservableObject {
 
     func refresh() {
         accessibilityGranted = AXIsProcessTrusted()
+        inputMonitoringGranted = CGPreflightListenEventAccess()
     }
 
     func requestAccessibilityPermission() {
@@ -20,10 +22,31 @@ final class PermissionsManager: ObservableObject {
         accessibilityGranted = AXIsProcessTrustedWithOptions(options)
     }
 
-    func openAccessibilitySettings() {
+    func requestInputMonitoringPermission() {
+        inputMonitoringGranted = CGRequestListenEventAccess()
+    }
+
+    @discardableResult
+    func openAccessibilitySettings() -> Bool {
         guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") else {
-            return
+            return openSystemSettingsApp()
         }
-        NSWorkspace.shared.open(url)
+        return NSWorkspace.shared.open(url) || openSystemSettingsApp()
+    }
+
+    @discardableResult
+    func openInputMonitoringSettings() -> Bool {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent") else {
+            return openSystemSettingsApp()
+        }
+        return NSWorkspace.shared.open(url) || openSystemSettingsApp()
+    }
+
+    private func openSystemSettingsApp() -> Bool {
+        NSWorkspace.shared.openApplication(
+            at: URL(fileURLWithPath: "/System/Applications/System Settings.app"),
+            configuration: NSWorkspace.OpenConfiguration()
+        ) { _, _ in }
+        return true
     }
 }

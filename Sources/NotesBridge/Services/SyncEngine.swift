@@ -2,8 +2,7 @@ import Foundation
 
 protocol Syncing: Sendable {
     func sync(
-        document: AppleNoteDocument,
-        markdown: String,
+        document: AppleNotesSyncDocument,
         settings: AppSettings,
         existingRelativePath: String?
     ) throws -> SyncRecord
@@ -17,14 +16,12 @@ struct SyncEngine: Syncing {
     }
 
     func sync(
-        document: AppleNoteDocument,
-        markdown: String,
+        document: AppleNotesSyncDocument,
         settings: AppSettings,
         existingRelativePath: String?
     ) throws -> SyncRecord {
         let export = try vaultClient.export(
             note: document,
-            markdown: markdown,
             settings: settings,
             existingRelativePath: existingRelativePath
         )

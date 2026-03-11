@@ -3,7 +3,11 @@ import SwiftUI
 @main
 struct NotesBridgeApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @StateObject private var appModel = AppModel()
+    @StateObject private var appModel: AppModel
+
+    init() {
+        _appModel = StateObject(wrappedValue: AppRuntime.shared.appModel)
+    }
 
     var body: some Scene {
         MenuBarExtra {

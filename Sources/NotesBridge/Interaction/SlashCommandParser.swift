@@ -65,7 +65,7 @@ struct SlashCommandParser: Sendable {
 
     private func activeToken(in value: String, caretLocation: Int) -> SlashCommandToken? {
         let string = value as NSString
-        guard let tokenRange = tokenRange(in: string, containing: caretLocation, allowCaretAtWhitespace: false) else {
+        guard let tokenRange = tokenRange(in: string, containing: caretLocation, allowCaretAtWhitespace: true) else {
             return nil
         }
 
@@ -81,11 +81,15 @@ struct SlashCommandParser: Sendable {
         guard string.length > 0 else { return nil }
         let safeCaret = max(0, min(caretLocation, string.length))
 
-        if !allowCaretAtWhitespace,
-           safeCaret < string.length,
+        if safeCaret < string.length,
            isWhitespace(string.character(at: safeCaret))
         {
-            return nil
+            if !allowCaretAtWhitespace {
+                return nil
+            }
+            if safeCaret == 0 || isWhitespace(string.character(at: safeCaret - 1)) {
+                return nil
+            }
         }
 
         var start = safeCaret

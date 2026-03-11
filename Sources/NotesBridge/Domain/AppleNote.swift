@@ -5,10 +5,18 @@ struct AppleNotesFolder: Codable, Identifiable, Hashable, Sendable {
     var name: String
     var accountName: String?
     var noteCount: Int
+    var relativePath: String? = nil
+
+    var exportRelativePath: String {
+        guard let relativePath else {
+            return name.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return relativePath.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     var displayName: String {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let baseName = trimmedName.isEmpty ? "Untitled Folder" : trimmedName
+        let baseName = trimmedName.isEmpty ? "Notes" : trimmedName
 
         guard let accountName, !accountName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return baseName
