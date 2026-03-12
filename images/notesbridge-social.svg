@@ -113,17 +113,23 @@
 
       <!-- Apple Notes Side -->
       <rect x="110" y="90" width="80" height="80" rx="20" fill="#1E293B" stroke="#334155"/>
-      <rect x="130" y="108" width="40" height="44" rx="10" fill="#FFF7ED" fill-opacity="0.96"/>
-      <rect x="130" y="108" width="40" height="10" rx="5" fill="#F59E0B"/>
-      <path d="M138 126 H162 M138 136 H162 M138 146 H156" stroke="#F59E0B" stroke-width="4.5" stroke-linecap="round"/>
+      <g transform="translate(129,106)">
+        <rect width="42" height="48" rx="10" fill="#FFF7ED"/>
+        <path d="M0 10C0 4.477 4.477 0 10 0H32C37.523 0 42 4.477 42 10V14H0V10Z" fill="#FBBF24"/>
+        <path d="M27 0H32C37.523 0 42 4.477 42 10V15L27 0Z" fill="#F59E0B"/>
+        <path d="M9 24H33M9 32H33M9 40H25" stroke="#F59E0B" stroke-width="4" stroke-linecap="round"/>
+      </g>
       
       <!-- Obsidian Side -->
       <rect x="970" y="90" width="80" height="80" rx="20" fill="#1E293B" stroke="#334155"/>
-      <path d="M1009 108 L1021 140 L1008 154 L996 140 Z" fill="#C4B5FD"/>
-      <path d="M996 140 L1008 154 L988 130 Z" fill="#818CF8"/>
-      <path d="M1021 140 L1008 154 L1028 146 Z" fill="#A78BFA"/>
-      <path d="M1009 108 L996 140 L1001 126 Z" fill="#DDD6FE"/>
-      <path d="M1009 108 L1021 140 L1018 126 Z" fill="#8B5CF6"/>
+      <g transform="translate(985,107)">
+        <path d="M24 2L35 33L24 50L12 33Z" fill="#C4B5FD"/>
+        <path d="M12 33L24 50L2 24Z" fill="#818CF8"/>
+        <path d="M35 33L24 50L46 38Z" fill="#A78BFA"/>
+        <path d="M24 2L12 33L17 18Z" fill="#DDD6FE"/>
+        <path d="M24 2L35 33L31 18Z" fill="#8B5CF6"/>
+        <path d="M12 33L24 28L35 33L24 50Z" fill="#7C3AED" fill-opacity="0.18"/>
+      </g>
 
       <text x="230" y="140" fill="#E2E8F0" font-size="32" font-family="Inter, sans-serif" font-weight="600">Notes</text>
       <text x="740" y="140" fill="#E2E8F0" font-size="30" font-family="Inter, sans-serif" font-weight="600">Obsidian Vault</text>
