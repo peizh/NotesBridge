@@ -13,12 +13,18 @@ final class FormattingCommandExecutor {
     }
 
     func perform(_ command: FormattingCommand) {
+        Task {
+            await performAsync(command)
+        }
+    }
+
+    func performAsync(_ command: FormattingCommand) async {
         guard isAppleNotesFrontmost,
               let notesPID = appleNotesProcessID
         else {
             return
         }
-        if performViaMenuItem(command) {
+        if await performViaMenuItem(command) {
             return
         }
         postShortcut(command.shortcut, to: notesPID)
@@ -33,7 +39,7 @@ final class FormattingCommandExecutor {
 
         deleteBackward(count: literalLength, to: notesPID)
         try? await Task.sleep(for: .milliseconds(45))
-        perform(command)
+        await performAsync(command)
     }
 
     func applySlashCommand(replacementRange: NSRange, command: FormattingCommand, in context: EditingContext) async {
@@ -41,7 +47,7 @@ final class FormattingCommandExecutor {
         guard replaceText(in: context.element, range: replacementRange, with: "") else { return }
 
         try? await Task.sleep(for: .milliseconds(45))
-        perform(command)
+        await performAsync(command)
     }
 
     func forwardKeyEventToAppleNotes(_ event: NSEvent) {
@@ -53,6 +59,7 @@ final class FormattingCommandExecutor {
         }
 
         keyDown.setIntegerValueField(.eventSourceUserData, value: 0)
+        keyUp.setIntegerValueField(.eventSourceUserData, value: 0)
         keyUp.type = .keyUp
         keyUp.flags = keyDown.flags
         keyDown.postToPid(notesPID)
@@ -67,7 +74,7 @@ final class FormattingCommandExecutor {
         NSRunningApplication.runningApplications(withBundleIdentifier: notesBundleIdentifier).first?.processIdentifier
     }
 
-    private func performViaMenuItem(_ command: FormattingCommand) -> Bool {
+    private func performViaMenuItem(_ command: FormattingCommand) async -> Bool {
         guard let invocation = menuInvocation(for: command) else {
             return false
         }
@@ -80,12 +87,14 @@ final class FormattingCommandExecutor {
         end tell
         """
 
-        do {
-            _ = try runner.run(executable: "/usr/bin/osascript", arguments: ["-e", script])
-            return true
-        } catch {
-            return false
-        }
+        return await Task.detached(priority: .userInitiated) { [runner] in
+            do {
+                _ = try runner.run(executable: "/usr/bin/osascript", arguments: ["-e", script])
+                return true
+            } catch {
+                return false
+            }
+        }.value
     }
 
     private func menuInvocation(for command: FormattingCommand) -> (menuBarItem: String, menuItem: String)? {
