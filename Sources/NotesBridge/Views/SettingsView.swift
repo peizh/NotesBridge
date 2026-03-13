@@ -34,11 +34,6 @@ struct SettingsView: View {
                             .foregroundStyle(appModel.interactionAvailability.accessibilityGranted ? .green : .orange)
                     }
 
-                    LabeledContent("Input Monitoring") {
-                        Text(appModel.interactionAvailability.inputMonitoringGranted ? "Granted" : "Optional for slash menu keyboard navigation")
-                            .foregroundStyle(appModel.interactionAvailability.inputMonitoringGranted ? .green : .secondary)
-                    }
-
                     HStack {
                         Button("Request Accessibility Permission") {
                             appModel.requestAccessibilityPermission()
@@ -53,17 +48,6 @@ struct SettingsView: View {
                     if appModel.isRunningBundledApp {
                         Button("Reveal NotesBridge App in Finder") {
                             appModel.revealCurrentAppInFinder()
-                        }
-                    }
-
-                    HStack {
-                        Button("Request Input Monitoring Permission") {
-                            appModel.requestInputMonitoringPermission()
-                        }
-                        .disabled(!appModel.buildFlavor.supportsInlineEnhancements)
-
-                        Button("Open Input Monitoring Settings") {
-                            appModel.openInputMonitoringSettings()
                         }
                     }
 
@@ -123,7 +107,7 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
 
                     if appModel.settings.enableSlashCommands && !appModel.slashKeyboardNavigationAvailable {
-                        Text("Keyboard slash navigation is unavailable. Enable Input Monitoring for NotesBridge in Privacy & Security, or use the mouse.")
+                        Text("Keyboard slash navigation is unavailable in the current build. Use the mouse, or type an exact slash command and press Space.")
                             .foregroundStyle(.secondary)
                     }
 

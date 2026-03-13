@@ -51,6 +51,21 @@ final class NotesContextMonitor: ObservableObject {
             return nil
         }
 
+        return snapshot(for: focusedElement, includeValue: includeValue)
+    }
+
+    func editingSnapshot(from element: AXUIElement, includeValue: Bool) -> EditingContext? {
+        guard availability.supportsInlineEnhancements,
+              permissionsManager.accessibilityGranted,
+              isEditable(element: element)
+        else {
+            return nil
+        }
+
+        return snapshot(for: element, includeValue: includeValue)
+    }
+
+    private func snapshot(for focusedElement: AXUIElement, includeValue: Bool) -> EditingContext? {
         let selectedRange = selectedRange(for: focusedElement)
         let selectedText = stringAttribute(kAXSelectedTextAttribute as CFString, from: focusedElement) ?? ""
         let value = includeValue ? stringAttribute(kAXValueAttribute as CFString, from: focusedElement) : nil

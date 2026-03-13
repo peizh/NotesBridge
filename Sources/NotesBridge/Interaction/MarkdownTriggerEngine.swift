@@ -5,8 +5,8 @@ import Foundation
 final class MarkdownTriggerEngine {
     private let contextMonitor: NotesContextMonitor
     private let executor: FormattingCommandExecutor
-    private var globalMonitor: Any?
-    private var pendingEvaluation: Task<Void, Never>?
+    private var timer: Timer?
+    private var lastAppliedSignature: String?
 
     init(contextMonitor: NotesContextMonitor, executor: FormattingCommandExecutor) {
         self.contextMonitor = contextMonitor
@@ -15,33 +15,21 @@ final class MarkdownTriggerEngine {
 
     func start() {
         stop()
+        evaluatePendingTrigger()
 
-        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+        let timer = Timer(timeInterval: 0.12, repeats: true) { [weak self] _ in
             Task { @MainActor in
-                self?.handle(event: event)
+                self?.evaluatePendingTrigger()
             }
         }
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
     }
 
     func stop() {
-        if let globalMonitor {
-            NSEvent.removeMonitor(globalMonitor)
-        }
-        globalMonitor = nil
-        pendingEvaluation?.cancel()
-        pendingEvaluation = nil
-    }
-
-    private func handle(event: NSEvent) {
-        guard contextMonitor.availability.canRunMarkdownTriggers else { return }
-        guard event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { return }
-        guard event.characters == " " else { return }
-
-        pendingEvaluation?.cancel()
-        pendingEvaluation = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(50))
-            self?.evaluatePendingTrigger()
-        }
+        timer?.invalidate()
+        timer = nil
+        lastAppliedSignature = nil
     }
 
     private func evaluatePendingTrigger() {
@@ -55,8 +43,13 @@ final class MarkdownTriggerEngine {
 
         let prefix = currentLinePrefix(in: value, caretLocation: snapshot.selectedRange.location)
         guard let match = MarkdownTriggerMatch.matching(prefix: prefix) else {
+            lastAppliedSignature = nil
             return
         }
+
+        let signature = "\(snapshot.selectedRange.location):\(match.literal)"
+        guard lastAppliedSignature != signature else { return }
+        lastAppliedSignature = signature
 
         Task {
             await executor.applyMarkdownTrigger(literalLength: match.literal.count, command: match.command)

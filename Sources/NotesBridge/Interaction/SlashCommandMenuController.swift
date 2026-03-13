@@ -6,17 +6,23 @@ final class SlashCommandMenuController {
     private let onHoverIndex: (Int) -> Void
     private let onSelectIndex: (Int) -> Void
     private let onFrameUpdated: (CGRect) -> Void
+    private let onKeyboardAction: (SlashCommandKeyboardAction) -> Void
+    private let onPassthroughKeyDown: (NSEvent) -> Void
     private var panel: NSPanel?
     private var hostingController: NSHostingController<SlashCommandMenuView>?
 
     init(
         onHoverIndex: @escaping (Int) -> Void,
         onSelectIndex: @escaping (Int) -> Void,
-        onFrameUpdated: @escaping (CGRect) -> Void
+        onFrameUpdated: @escaping (CGRect) -> Void,
+        onKeyboardAction: @escaping (SlashCommandKeyboardAction) -> Void,
+        onPassthroughKeyDown: @escaping (NSEvent) -> Void
     ) {
         self.onHoverIndex = onHoverIndex
         self.onSelectIndex = onSelectIndex
         self.onFrameUpdated = onFrameUpdated
+        self.onKeyboardAction = onKeyboardAction
+        self.onPassthroughKeyDown = onPassthroughKeyDown
     }
 
     func update(entries: [SlashCommandEntry], selectedIndex: Int, anchorRect: CGRect?) {
@@ -38,12 +44,20 @@ final class SlashCommandMenuController {
         let origin = bestPanelOrigin(for: anchorRect, panelSize: size, visibleFrame: visibleFrame)
 
         panel.setFrame(CGRect(origin: origin, size: size), display: true)
-        panel.orderFrontRegardless()
+        panel.makeKeyAndOrderFront(nil)
         onFrameUpdated(panel.frame)
     }
 
     func hide() {
         panel?.orderOut(nil)
+    }
+
+    var isVisible: Bool {
+        panel?.isVisible == true
+    }
+
+    var isKeyWindow: Bool {
+        panel?.isKeyWindow == true
     }
 
     private func ensurePanel() -> NSPanel {
@@ -52,15 +66,18 @@ final class SlashCommandMenuController {
         }
 
         let hostingController = NSHostingController(rootView: rootView(entries: [], selectedIndex: 0))
-        let panel = NSPanel(
+        let panel = SlashCommandPanel(
             contentRect: CGRect(x: 0, y: 0, width: 320, height: 120),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
-            defer: false
+            defer: false,
+            onKeyboardAction: onKeyboardAction,
+            onPassthroughKeyDown: onPassthroughKeyDown
         )
         panel.contentViewController = hostingController
         panel.level = .floating
         panel.isFloatingPanel = true
+        panel.becomesKeyOnlyIfNeeded = true
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
         panel.hasShadow = true
         panel.backgroundColor = .clear
@@ -128,5 +145,44 @@ final class SlashCommandMenuController {
         }
 
         return CGPoint(x: x, y: chosenY)
+    }
+}
+
+private final class SlashCommandPanel: NSPanel {
+    private let onKeyboardAction: (SlashCommandKeyboardAction) -> Void
+    private let onPassthroughKeyDown: (NSEvent) -> Void
+
+    init(
+        contentRect: CGRect,
+        styleMask style: NSWindow.StyleMask,
+        backing bufferingType: NSWindow.BackingStoreType,
+        defer flag: Bool,
+        onKeyboardAction: @escaping (SlashCommandKeyboardAction) -> Void,
+        onPassthroughKeyDown: @escaping (NSEvent) -> Void
+    ) {
+        self.onKeyboardAction = onKeyboardAction
+        self.onPassthroughKeyDown = onPassthroughKeyDown
+        super.init(contentRect: contentRect, styleMask: style, backing: bufferingType, defer: flag)
+    }
+
+    override var canBecomeKey: Bool {
+        true
+    }
+
+    override var canBecomeMain: Bool {
+        false
+    }
+
+    override func keyDown(with event: NSEvent) {
+        guard let action = SlashCommandKeyboardAction(keyCode: event.keyCode) else {
+            onPassthroughKeyDown(event)
+            return
+        }
+
+        onKeyboardAction(action)
+    }
+
+    override func cancelOperation(_ sender: Any?) {
+        onKeyboardAction(.dismiss)
     }
 }

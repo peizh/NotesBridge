@@ -33,7 +33,7 @@ The current implementation is intentionally conservative:
 - Inline enhancements rely on Accessibility and event synthesis, so the direct-download build is the primary vehicle for the full experience.
 - The App Store flavor can be simulated by launching with `NOTESBRIDGE_APPSTORE=1`, which disables inline Apple Notes enhancements and leaves settings/sync features active.
 - Apple Notes -> Obsidian is still the primary sync direction.
-- Slash command keyboard navigation may require Input Monitoring; if interception is unavailable, exact commands plus space and mouse-click selection still work.
+- Slash commands currently support exact command + space and mouse-driven suggestion selection without requiring Input Monitoring.
 - Full-note sync prompts for the macOS `group.com.apple.notes` data folder so NotesBridge can read the Apple Notes database and attachment files directly.
 
 ## Build and run
@@ -44,7 +44,7 @@ The current implementation is intentionally conservative:
 
 This is the recommended development entrypoint. It builds the SwiftPM executable, wraps it into a signed `NotesBridge.app`, and launches the bundled app from `~/Library/Application Support/NotesBridge/NotesBridge.app`.
 
-The bundled app now uses a stable designated requirement so Accessibility and Input Monitoring can stay attached across rebuilds. If you previously granted an older NotesBridge build and the app still shows `Required`, remove the old entry in System Settings once and add the current bundled app again.
+The bundled app now uses a stable designated requirement so Accessibility can stay attached across rebuilds. If you previously granted an older NotesBridge build and the app still shows `Required`, remove the old entry in System Settings once and add the current bundled app again.
 
 For quick non-bundled runs you can still use:
 
@@ -52,7 +52,7 @@ For quick non-bundled runs you can still use:
 swift run
 ```
 
-But `swift run` launches a bare executable, so macOS permission flows that depend on a real app bundle, especially Input Monitoring for slash menu keyboard navigation, will not behave correctly there.
+But `swift run` launches a bare executable, so macOS permission flows that depend on a real app bundle, especially Accessibility, will not behave correctly there.
 
 If you only want to rebuild the `.app` without launching it:
 
