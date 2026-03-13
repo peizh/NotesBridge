@@ -269,11 +269,8 @@ final class AppModel: ObservableObject {
         if !interactionAvailability.editableFocus {
             return "Focus the Apple Notes editor to use slash commands."
         }
-        if !interactionAvailability.inputMonitoringGranted {
-            return "Slash commands are active. Keyboard navigation is unavailable; use the mouse or exact command + Space."
-        }
         if !slashKeyboardNavigationAvailable {
-            return "Slash commands are active. Keyboard navigation is unavailable; use the mouse."
+            return "Slash commands are active. Use the mouse, or complete an exact slash command and press Space."
         }
         return "Type / for suggestions, or complete a slash command and press Space."
     }
@@ -284,9 +281,6 @@ final class AppModel: ObservableObject {
         }
         if isRunningBundledApp && !interactionAvailability.accessibilityGranted {
             return "Grant Accessibility to NotesBridge. If it is already checked, remove and re-add the current app bundle once."
-        }
-        if !isRunningBundledApp && !interactionAvailability.inputMonitoringGranted {
-            return "Inline enhancements are active. Launch as a bundled app if you want macOS to offer Input Monitoring for slash menu keyboard navigation."
         }
         return interactionAvailability.summary
     }
@@ -894,10 +888,6 @@ final class AppModel: ObservableObject {
         }
 
         scheduleAccessibilityPromptIfNeeded()
-
-        Task {
-            await refreshFolderSummaries()
-        }
     }
 
     private func refreshAppleNotesDataAccessStatus() {

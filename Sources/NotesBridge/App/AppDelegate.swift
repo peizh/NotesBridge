@@ -14,7 +14,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             scheduleUITestAutomationIfNeeded()
         } else {
             NSApp.setActivationPolicy(.accessory)
-            scheduleInputMonitoringRequestIfNeeded()
             scheduleDebugSyncIfNeeded()
         }
     }
@@ -43,16 +42,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Task {
                 await AppRuntime.shared.appModel.syncAllNotes()
             }
-        }
-    }
-
-    private func scheduleInputMonitoringRequestIfNeeded() {
-        guard ProcessInfo.processInfo.environment["NOTESBRIDGE_REQUEST_INPUT_MONITORING"] == "1" else {
-            return
-        }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            AppRuntime.shared.appModel.requestInputMonitoringPermission()
         }
     }
 

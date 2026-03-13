@@ -28,8 +28,27 @@ final class FormattingCommandExecutor {
         perform(command)
     }
 
+    func forwardKeyEventToAppleNotes(_ event: NSEvent) {
+        guard let notesPID = appleNotesProcessID,
+              let keyDown = event.cgEvent?.copy(),
+              let keyUp = keyDown.copy()
+        else {
+            return
+        }
+
+        keyDown.setIntegerValueField(.eventSourceUserData, value: 0)
+        keyUp.type = .keyUp
+        keyUp.flags = keyDown.flags
+        keyDown.postToPid(notesPID)
+        keyUp.postToPid(notesPID)
+    }
+
     private var isAppleNotesFrontmost: Bool {
         NSWorkspace.shared.frontmostApplication?.bundleIdentifier == notesBundleIdentifier
+    }
+
+    private var appleNotesProcessID: pid_t? {
+        NSRunningApplication.runningApplications(withBundleIdentifier: notesBundleIdentifier).first?.processIdentifier
     }
 
     private func deleteBackward(count: Int) {

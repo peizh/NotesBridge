@@ -1,3 +1,4 @@
+#if canImport(XCTest)
 import XCTest
 
 final class NotesBridgeUITests: XCTestCase {
@@ -173,3 +174,4 @@ private enum UITestError: LocalizedError {
         }
     }
 }
+#endif
