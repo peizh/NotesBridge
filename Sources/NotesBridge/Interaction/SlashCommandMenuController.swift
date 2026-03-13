@@ -10,6 +10,9 @@ final class SlashCommandMenuController {
     private let onPassthroughKeyDown: (NSEvent) -> Void
     private var panel: NSPanel?
     private var hostingController: NSHostingController<SlashCommandMenuView>?
+    private var lastEntries: [SlashCommandEntry] = []
+    private var lastSelectedIndex = 0
+    private var lastFrame: CGRect?
 
     init(
         onHoverIndex: @escaping (Int) -> Void,
@@ -27,9 +30,14 @@ final class SlashCommandMenuController {
 
     func update(entries: [SlashCommandEntry], selectedIndex: Int, anchorRect: CGRect?) {
         let panel = ensurePanel()
-        hostingController?.rootView = rootView(entries: entries, selectedIndex: selectedIndex)
-        hostingController?.view.layoutSubtreeIfNeeded()
-        panel.contentView?.layoutSubtreeIfNeeded()
+        let contentChanged = lastEntries != entries || lastSelectedIndex != selectedIndex
+        if contentChanged {
+            hostingController?.rootView = rootView(entries: entries, selectedIndex: selectedIndex)
+            hostingController?.view.layoutSubtreeIfNeeded()
+            panel.contentView?.layoutSubtreeIfNeeded()
+            lastEntries = entries
+            lastSelectedIndex = selectedIndex
+        }
 
         let fittedSize = hostingController?.view.fittingSize ?? CGSize(width: 320, height: 120)
         let size = CGSize(
@@ -42,14 +50,24 @@ final class SlashCommandMenuController {
             partialResult.union(screen.visibleFrame)
         }
         let origin = bestPanelOrigin(for: anchorRect, panelSize: size, visibleFrame: visibleFrame)
+        let targetFrame = CGRect(origin: origin, size: size)
 
-        panel.setFrame(CGRect(origin: origin, size: size), display: true)
-        panel.makeKeyAndOrderFront(nil)
-        onFrameUpdated(panel.frame)
+        if lastFrame.map({ !approximatelyEqual($0, targetFrame) }) ?? true {
+            panel.setFrame(targetFrame, display: true)
+            lastFrame = targetFrame
+            onFrameUpdated(panel.frame)
+        }
+
+        if !panel.isVisible {
+            panel.makeKeyAndOrderFront(nil)
+        } else if !panel.isKeyWindow {
+            panel.makeKey()
+        }
     }
 
     func hide() {
         panel?.orderOut(nil)
+        lastFrame = nil
     }
 
     var isVisible: Bool {
@@ -145,6 +163,13 @@ final class SlashCommandMenuController {
         }
 
         return CGPoint(x: x, y: chosenY)
+    }
+
+    private func approximatelyEqual(_ lhs: CGRect, _ rhs: CGRect, tolerance: CGFloat = 0.5) -> Bool {
+        abs(lhs.origin.x - rhs.origin.x) <= tolerance
+            && abs(lhs.origin.y - rhs.origin.y) <= tolerance
+            && abs(lhs.size.width - rhs.size.width) <= tolerance
+            && abs(lhs.size.height - rhs.size.height) <= tolerance
     }
 }
 
