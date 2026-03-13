@@ -148,6 +148,7 @@ final class SlashCommandEngine {
             selectedIndex: selectedIndex,
             anchorRect: menuAnchorRect(for: snapshot)
         )
+        updateKeyboardNavigationAvailability(true)
         recordDiagnostic(
             "menu update entries=\(menuMatch.entries.count) selected=\(selectedIndex) anchor=\(Self.describe(rect: menuAnchorRect(for: snapshot)))"
         )
@@ -161,6 +162,7 @@ final class SlashCommandEngine {
         currentEditingContext = nil
         selectedIndex = 0
         menuController.hide()
+        updateKeyboardNavigationAvailability(false)
     }
 
     private func updateSelection(_ index: Int) {
