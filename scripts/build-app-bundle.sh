@@ -83,8 +83,48 @@ EXECUTABLE_PATH="$ROOT_DIR/.build/$BUILD_CONFIG/NotesBridge"
 APP_BUNDLE_PATH="$OUTPUT_DIR/$APP_NAME.app"
 CONTENTS_PATH="$APP_BUNDLE_PATH/Contents"
 MACOS_PATH="$CONTENTS_PATH/MacOS"
+RESOURCES_PATH="$CONTENTS_PATH/Resources"
 INFO_PLIST_PATH="$CONTENTS_PATH/Info.plist"
 DESIGNATED_REQUIREMENT="=designated => identifier \"$BUNDLE_ID\""
+ICON_SOURCE_PATH="$ROOT_DIR/images/notesbridge-app-icon.svg"
+ICONSET_PATH="$OUTPUT_DIR/$APP_NAME.iconset"
+ICON_NAME="$APP_NAME"
+
+build_app_icon() {
+    if [[ ! -f "$ICON_SOURCE_PATH" ]]; then
+        echo "App icon source not found at $ICON_SOURCE_PATH" >&2
+        exit 1
+    fi
+
+    rm -rf "$ICONSET_PATH"
+    mkdir -p "$ICONSET_PATH"
+
+    local rendered_dir
+    rendered_dir="$(mktemp -d)"
+    qlmanage -t -s 1024 -o "$rendered_dir" "$ICON_SOURCE_PATH" >/dev/null 2>&1
+
+    local base_png="$rendered_dir/$(basename "$ICON_SOURCE_PATH").png"
+    if [[ ! -f "$base_png" ]]; then
+        echo "Failed to render app icon preview from $ICON_SOURCE_PATH" >&2
+        rm -rf "$rendered_dir"
+        exit 1
+    fi
+
+    cp "$base_png" "$ICONSET_PATH/icon_512x512@2x.png"
+    sips -z 512 512 "$base_png" --out "$ICONSET_PATH/icon_512x512.png" >/dev/null
+    sips -z 256 256 "$base_png" --out "$ICONSET_PATH/icon_256x256.png" >/dev/null
+    cp "$ICONSET_PATH/icon_512x512.png" "$ICONSET_PATH/icon_256x256@2x.png"
+    sips -z 128 128 "$base_png" --out "$ICONSET_PATH/icon_128x128.png" >/dev/null
+    cp "$ICONSET_PATH/icon_256x256.png" "$ICONSET_PATH/icon_128x128@2x.png"
+    sips -z 64 64 "$base_png" --out "$ICONSET_PATH/icon_64x64.png" >/dev/null
+    sips -z 32 32 "$base_png" --out "$ICONSET_PATH/icon_32x32.png" >/dev/null
+    cp "$ICONSET_PATH/icon_64x64.png" "$ICONSET_PATH/icon_32x32@2x.png"
+    sips -z 16 16 "$base_png" --out "$ICONSET_PATH/icon_16x16.png" >/dev/null
+    sips -z 32 32 "$base_png" --out "$ICONSET_PATH/icon_16x16@2x.png" >/dev/null
+
+    iconutil -c icns "$ICONSET_PATH" -o "$RESOURCES_PATH/$ICON_NAME.icns"
+    rm -rf "$ICONSET_PATH" "$rendered_dir"
+}
 
 echo "Building NotesBridge ($BUILD_CONFIG)..."
 swift build --package-path "$ROOT_DIR" -c "$BUILD_CONFIG"
@@ -97,7 +137,9 @@ fi
 echo "Packaging app bundle at $APP_BUNDLE_PATH..."
 rm -rf "$APP_BUNDLE_PATH"
 mkdir -p "$MACOS_PATH"
+mkdir -p "$RESOURCES_PATH"
 cp "$EXECUTABLE_PATH" "$MACOS_PATH/$APP_NAME"
+build_app_icon
 
 cat > "$INFO_PLIST_PATH" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -108,6 +150,8 @@ cat > "$INFO_PLIST_PATH" <<PLIST
     <string>en</string>
     <key>CFBundleExecutable</key>
     <string>$APP_NAME</string>
+    <key>CFBundleIconFile</key>
+    <string>$ICON_NAME</string>
     <key>CFBundleIdentifier</key>
     <string>$BUNDLE_ID</string>
     <key>CFBundleInfoDictionaryVersion</key>
