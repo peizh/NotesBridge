@@ -62,6 +62,44 @@ If you only want to rebuild the `.app` without launching it:
 
 On first bundled launch, macOS may ask for Accessibility and Automation permissions so NotesBridge can watch Apple Notes and sync its content. The first full sync also asks you to choose `~/Library/Group Containers/group.com.apple.notes` so the app can read NoteStore.sqlite and binary attachments.
 
+## Release for users
+
+For end users, the recommended distribution path is a direct-download macOS app bundle.
+
+- Build a release app bundle with `./scripts/build-release-app.sh`
+- Package it for download as a ZIP archive
+- Sign it with `Developer ID Application`
+- Notarize it with Apple and staple the ticket before upload
+
+The repository now includes:
+
+- `./scripts/build-release-app.sh` for release bundle creation
+- `./scripts/package-release-zip.sh` for direct-download packaging
+- `./scripts/notarize-release.sh` for notarization and stapling
+- `.github/workflows/release.yml` for GitHub Actions release builds
+
+Example local release build:
+
+```bash
+NOTESBRIDGE_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
+NOTESBRIDGE_TEAM_ID="TEAMID" \
+NOTESBRIDGE_VERSION="1.0.0" \
+NOTESBRIDGE_BUILD_NUMBER="100" \
+./scripts/build-release-app.sh
+```
+
+To notarize, also provide:
+
+```bash
+export NOTESBRIDGE_NOTARIZE=1
+export APPLE_ID="you@example.com"
+export APPLE_TEAM_ID="TEAMID"
+export APPLE_APP_SPECIFIC_PASSWORD="app-specific-password"
+./scripts/build-release-app.sh
+```
+
+The final direct-download artifact is produced in `./dist/` and can be uploaded to a GitHub Release for users to install.
+
 ## Suggested next steps
 
 1. Harden selection anchoring and formatting-bar placement across multiple displays and fullscreen spaces.
