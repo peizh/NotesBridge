@@ -1,0 +1,112 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (for example 1.0.0 or v1.0.0)"
+        required: true
+        type: string
+      notarize:
+        description: "Sign and notarize if Apple credentials are available"
+        required: true
+        default: false
+        type: boolean
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-release:
+    runs-on: macos-26
+    timeout-minutes: 45
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+
+      - name: Resolve release metadata
+        id: meta
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_TYPE:-}" == "tag" ]]; then
+            version="${GITHUB_REF_NAME}"
+          else
+            version="${{ inputs.version }}"
+          fi
+          version="${version#v}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "build_number=${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+
+      - name: Import signing certificate
+        if: ${{ inputs.notarize || startsWith(github.ref, 'refs/tags/v') }}
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.MACOS_DEVELOPER_ID_CERT_BASE64 }}
+          P12_PASSWORD: ${{ secrets.MACOS_DEVELOPER_ID_CERT_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.MACOS_TEMP_KEYCHAIN_PASSWORD }}
+        shell: bash
+        run: |
+          if [[ -z "${BUILD_CERTIFICATE_BASE64:-}" || -z "${P12_PASSWORD:-}" || -z "${KEYCHAIN_PASSWORD:-}" ]]; then
+            echo "Missing signing certificate secrets." >&2
+            exit 1
+          fi
+          CERT_PATH="$RUNNER_TEMP/developer-id.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o "$CERT_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+
+      - name: Build release app
+        env:
+          NOTESBRIDGE_VERSION: ${{ steps.meta.outputs.version }}
+          NOTESBRIDGE_BUILD_NUMBER: ${{ steps.meta.outputs.build_number }}
+          NOTESBRIDGE_BUNDLE_ID: dev.notesbridge.app
+          NOTESBRIDGE_SIGN_IDENTITY: ${{ secrets.MACOS_DEVELOPER_ID_APPLICATION }}
+          NOTESBRIDGE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          NOTESBRIDGE_NOTARIZE: ${{ (inputs.notarize || startsWith(github.ref, 'refs/tags/v')) && '1' || '0' }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        shell: bash
+        run: |
+          if [[ "${NOTESBRIDGE_NOTARIZE}" == "1" && -z "${NOTESBRIDGE_SIGN_IDENTITY:-}" ]]; then
+            echo "Missing MACOS_DEVELOPER_ID_APPLICATION secret." >&2
+            exit 1
+          fi
+          if [[ "${NOTESBRIDGE_NOTARIZE}" != "1" ]]; then
+            export NOTESBRIDGE_SIGN_IDENTITY="-"
+            export NOTESBRIDGE_TEAM_ID=""
+          fi
+          ./scripts/build-release-app.sh
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: NotesBridge-${{ steps.meta.outputs.version }}-macOS
+          path: |
+            dist/NotesBridge.app
+            dist/NotesBridge-${{ steps.meta.outputs.version }}-macOS.zip
+
+      - name: Create or update GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh release create "${{ steps.meta.outputs.tag }}" \
+            "dist/NotesBridge-${{ steps.meta.outputs.version }}-macOS.zip" \
+            --title "NotesBridge ${{ steps.meta.outputs.version }}" \
+            --notes "Direct download build for macOS." \
+          || gh release upload "${{ steps.meta.outputs.tag }}" \
+            "dist/NotesBridge-${{ steps.meta.outputs.version }}-macOS.zip" \
+            --clobber
