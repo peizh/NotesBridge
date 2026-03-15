@@ -27,11 +27,11 @@ struct AppLocalizationTests {
     }
 
     @Test
-    func slashCommandTitlesAreLocalizedWithoutChangingTokens() {
+    func slashCommandTitlesAreLocalizedWithoutChangingTokens() throws {
         let chinese = AppLocalization(language: .simplifiedChinese)
-        let entry = SlashCommandCatalog().entries.first { $0.primaryAlias == "title" }
+        let entry = try #require(SlashCommandCatalog().entries.first { $0.primaryAlias == "title" })
 
-        #expect(entry?.localizedTitle(using: chinese) == "标题")
-        #expect(entry?.token == "/title")
+        #expect(entry.localizedTitle(using: chinese) == "标题")
+        #expect(entry.token == "/title")
     }
 }
