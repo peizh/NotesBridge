@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SlashCommandMenuView: View {
     let entries: [SlashCommandEntry]
+    let localization: AppLocalization
     let selectedIndex: Int
     let onHoverIndex: (Int) -> Void
     let onSelectIndex: (Int) -> Void
@@ -14,7 +15,7 @@ struct SlashCommandMenuView: View {
                 } label: {
                     HStack(spacing: 12) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(entry.title)
+                            Text(entry.localizedTitle(using: localization))
                                 .font(.system(size: 13, weight: .semibold))
                                 .foregroundStyle(.primary)
                             Text(entry.token)

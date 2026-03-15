@@ -25,6 +25,22 @@ struct SyncProgress: Equatable, Sendable {
         return "Current folder: \(currentFolderName)"
     }
 
+    func localizedSummaryText(using localization: AppLocalization) -> String {
+        localization.text(
+            "%d%% • %d/%d notes • %d/%d folders",
+            Int((fractionCompleted * 100).rounded()),
+            completedNotes,
+            totalNotes,
+            completedFolders,
+            totalFolders
+        )
+    }
+
+    func localizedCurrentFolderText(using localization: AppLocalization) -> String? {
+        guard let currentFolderName, !currentFolderName.isEmpty else { return nil }
+        return localization.text("Current folder: %@", currentFolderName)
+    }
+
     mutating func enterFolder(_ name: String) {
         currentFolderName = name
     }

@@ -14,6 +14,7 @@ enum SyncDirection: String, Codable, CaseIterable, Identifiable, Sendable {
 }
 
 struct AppSettings: Codable, Equatable, Sendable {
+    var appLanguage: AppLanguage
     var vaultPath: String?
     var appleNotesDataPath: String?
     var appleNotesDataBookmark: Data?
@@ -28,6 +29,7 @@ struct AppSettings: Codable, Equatable, Sendable {
     var enableSlashCommands: Bool
 
     static let `default` = AppSettings(
+        appLanguage: .system,
         vaultPath: nil,
         appleNotesDataPath: nil,
         appleNotesDataBookmark: nil,
@@ -49,6 +51,7 @@ struct AppSettings: Codable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case vaultPath
+        case appLanguage
         case appleNotesDataPath
         case appleNotesDataBookmark
         case exportFolderName
@@ -63,6 +66,7 @@ struct AppSettings: Codable, Equatable, Sendable {
     }
 
     init(
+        appLanguage: AppLanguage,
         vaultPath: String?,
         appleNotesDataPath: String?,
         appleNotesDataBookmark: Data?,
@@ -76,6 +80,7 @@ struct AppSettings: Codable, Equatable, Sendable {
         enableMarkdownTriggers: Bool,
         enableSlashCommands: Bool
     ) {
+        self.appLanguage = appLanguage
         self.vaultPath = vaultPath
         self.appleNotesDataPath = appleNotesDataPath
         self.appleNotesDataBookmark = appleNotesDataBookmark
@@ -92,6 +97,7 @@ struct AppSettings: Codable, Equatable, Sendable {
 
     init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.appLanguage = try container.decodeIfPresent(AppLanguage.self, forKey: .appLanguage) ?? Self.default.appLanguage
         self.vaultPath = try container.decodeIfPresent(String.self, forKey: .vaultPath)
         self.appleNotesDataPath = try container.decodeIfPresent(String.self, forKey: .appleNotesDataPath)
         self.appleNotesDataBookmark = try container.decodeIfPresent(Data.self, forKey: .appleNotesDataBookmark)
@@ -108,6 +114,7 @@ struct AppSettings: Codable, Equatable, Sendable {
 
     func encode(to encoder: any Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(appLanguage, forKey: .appLanguage)
         try container.encodeIfPresent(vaultPath, forKey: .vaultPath)
         try container.encodeIfPresent(appleNotesDataPath, forKey: .appleNotesDataPath)
         try container.encodeIfPresent(appleNotesDataBookmark, forKey: .appleNotesDataBookmark)

@@ -4,25 +4,29 @@ struct SlashCommandEntry: Identifiable, Equatable, Sendable {
     let command: FormattingCommand
     let primaryAlias: String
     let aliases: [String]
-    let title: String
+    let titleKey: String
 
     var id: FormattingCommand { command }
     var token: String { "/\(primaryAlias)" }
+
+    func localizedTitle(using localization: AppLocalization) -> String {
+        localization.text(titleKey)
+    }
 }
 
 struct SlashCommandCatalog: Sendable {
     let entries: [SlashCommandEntry] = [
-        SlashCommandEntry(command: .title, primaryAlias: "title", aliases: ["title", "h1"], title: "Title"),
-        SlashCommandEntry(command: .heading, primaryAlias: "heading", aliases: ["heading", "h2"], title: "Heading"),
-        SlashCommandEntry(command: .subheading, primaryAlias: "subheading", aliases: ["subheading", "h3"], title: "Subheading"),
-        SlashCommandEntry(command: .body, primaryAlias: "body", aliases: ["body"], title: "Body"),
-        SlashCommandEntry(command: .monostyled, primaryAlias: "monostyled", aliases: ["monostyled", "code"], title: "Monostyled"),
-        SlashCommandEntry(command: .checklist, primaryAlias: "checklist", aliases: ["checklist"], title: "Checklist"),
-        SlashCommandEntry(command: .bulletedList, primaryAlias: "bulletedlist", aliases: ["bulletedlist"], title: "Bulleted List"),
-        SlashCommandEntry(command: .dashedList, primaryAlias: "dashedlist", aliases: ["dashedlist"], title: "Dashed List"),
-        SlashCommandEntry(command: .numberedList, primaryAlias: "numberedlist", aliases: ["numberedlist"], title: "Numbered List"),
-        SlashCommandEntry(command: .quote, primaryAlias: "quote", aliases: ["quote", "blockquote"], title: "Block Quote"),
-        SlashCommandEntry(command: .table, primaryAlias: "table", aliases: ["table"], title: "Table"),
+        SlashCommandEntry(command: .title, primaryAlias: "title", aliases: ["title", "h1"], titleKey: "Title"),
+        SlashCommandEntry(command: .heading, primaryAlias: "heading", aliases: ["heading", "h2"], titleKey: "Heading"),
+        SlashCommandEntry(command: .subheading, primaryAlias: "subheading", aliases: ["subheading", "h3"], titleKey: "Subheading"),
+        SlashCommandEntry(command: .body, primaryAlias: "body", aliases: ["body"], titleKey: "Body"),
+        SlashCommandEntry(command: .monostyled, primaryAlias: "monostyled", aliases: ["monostyled", "code"], titleKey: "Monostyled"),
+        SlashCommandEntry(command: .checklist, primaryAlias: "checklist", aliases: ["checklist"], titleKey: "Checklist"),
+        SlashCommandEntry(command: .bulletedList, primaryAlias: "bulletedlist", aliases: ["bulletedlist"], titleKey: "Bulleted List"),
+        SlashCommandEntry(command: .dashedList, primaryAlias: "dashedlist", aliases: ["dashedlist"], titleKey: "Dashed List"),
+        SlashCommandEntry(command: .numberedList, primaryAlias: "numberedlist", aliases: ["numberedlist"], titleKey: "Numbered List"),
+        SlashCommandEntry(command: .quote, primaryAlias: "quote", aliases: ["quote", "blockquote"], titleKey: "Block Quote"),
+        SlashCommandEntry(command: .table, primaryAlias: "table", aliases: ["table"], titleKey: "Table"),
     ]
 
     func suggestions(for query: String) -> [SlashCommandEntry] {

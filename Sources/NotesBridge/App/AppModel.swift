@@ -176,6 +176,9 @@ final class AppModel: ObservableObject {
         self.slashCommandEngine.onDiagnosticsChanged = { [weak self] diagnostics in
             self?.slashDiagnostics = diagnostics
         }
+        self.slashCommandEngine.localizationProvider = { [weak self] in
+            self?.localization ?? AppLocalization(language: .system)
+        }
 
         bindInteractionState()
         self.statusObserver?(statusMessage)
@@ -196,14 +199,18 @@ final class AppModel: ObservableObject {
     var appleNotesDataAccessLabel: String {
         switch appleNotesDataAccessStatus?.level {
         case .accessible:
-            return "Accessible"
+            return t("Accessible")
         case .limited:
-            return "Limited"
+            return t("Limited")
         case .invalid:
-            return "Invalid"
+            return t("Invalid")
         case nil:
-            return "Not configured"
+            return t("Not configured")
         }
+    }
+
+    var localizedBuildFlavorTitle: String {
+        t(buildFlavor.title)
     }
 
     var syncedNoteCount: Int {
@@ -215,7 +222,7 @@ final class AppModel: ObservableObject {
     }
 
     var lastFullSyncLabel: String {
-        guard let lastFullSyncAt = syncIndex.lastFullSyncAt else { return "Never" }
+        guard let lastFullSyncAt = syncIndex.lastFullSyncAt else { return t("Never") }
         return lastFullSyncAt.formatted(date: .abbreviated, time: .shortened)
     }
 
@@ -225,13 +232,13 @@ final class AppModel: ObservableObject {
 
     var selectionSummary: String {
         guard let selectionContext, selectionContext.hasSelection else {
-            return "No text selected"
+            return t("No text selected")
         }
 
         let snippet = selectionContext.selectedText
             .replacingOccurrences(of: "\n", with: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        return snippet.isEmpty ? "Selected text ready" : snippet
+        return snippet.isEmpty ? t("Selected text ready") : snippet
     }
 
     var menuBarSymbolName: String {
@@ -249,40 +256,40 @@ final class AppModel: ObservableObject {
 
     var slashCommandsSummary: String {
         if !buildFlavor.supportsInlineEnhancements {
-            return "Slash commands are unavailable in the Mac App Store build."
+            return t("Slash commands are unavailable in the Mac App Store build.")
         }
         if !settings.enableInlineEnhancements {
-            return "Slash commands are disabled with inline enhancements."
+            return t("Slash commands are disabled with inline enhancements.")
         }
         if !settings.enableSlashCommands {
-            return "Slash commands are turned off in Settings."
+            return t("Slash commands are turned off in Settings.")
         }
         if !interactionAvailability.accessibilityGranted {
             if isRunningBundledApp {
-                return "Accessibility permission is required for slash commands. If NotesBridge is already checked in Accessibility, remove and re-add the current app bundle once."
+                return t("Accessibility permission is required for slash commands. If NotesBridge is already checked in Accessibility, remove and re-add the current app bundle once.")
             }
-            return "Accessibility permission is required for slash commands."
+            return t("Accessibility permission is required for slash commands.")
         }
         if !interactionAvailability.notesIsFrontmost {
-            return "Bring Apple Notes to the front to use slash commands."
+            return t("Bring Apple Notes to the front to use slash commands.")
         }
         if !interactionAvailability.editableFocus {
-            return "Focus the Apple Notes editor to use slash commands."
+            return t("Focus the Apple Notes editor to use slash commands.")
         }
         if !slashKeyboardNavigationAvailable {
-            return "Slash commands are active. Use the mouse, or complete an exact slash command and press Space."
+            return t("Slash commands are active. Use the mouse, or complete an exact slash command and press Space.")
         }
-        return "Type / for suggestions, or complete a slash command and press Space."
+        return t("Type / for suggestions, or complete a slash command and press Space.")
     }
 
     var inlineEnhancementsSummary: String {
         if !buildFlavor.supportsInlineEnhancements {
-            return "Inline enhancements are disabled in the Mac App Store build."
+            return t("Inline enhancements are disabled in the Mac App Store build.")
         }
         if isRunningBundledApp && !interactionAvailability.accessibilityGranted {
-            return "Grant Accessibility to NotesBridge. If it is already checked, remove and re-add the current app bundle once."
+            return t("Grant Accessibility to NotesBridge. If it is already checked, remove and re-add the current app bundle once.")
         }
-        return interactionAvailability.summary
+        return t(interactionAvailability.summary)
     }
 
     var attachmentStorageBasePath: String {
@@ -297,18 +304,34 @@ final class AppModel: ObservableObject {
         attachmentStorage.warning
     }
 
+    var localization: AppLocalization {
+        AppLocalization(language: settings.appLanguage)
+    }
+
+    func t(_ key: String) -> String {
+        localization.text(key)
+    }
+
+    func tf(_ key: String, _ arguments: CVarArg...) -> String {
+        localization.text(key, arguments)
+    }
+
+    func languageDisplayName(for language: AppLanguage) -> String {
+        localization.languageDisplayName(for: language)
+    }
+
     func requestAccessibilityPermission() {
-        statusMessage = "Requesting Accessibility permission for NotesBridge..."
+        statusMessage = t("Requesting Accessibility permission for NotesBridge...")
         permissionsManager.requestAccessibilityPermission()
         notesContextMonitor.updateSettings(settings)
         if interactionAvailability.accessibilityGranted {
-            statusMessage = "Accessibility is already granted for NotesBridge."
+            statusMessage = t("Accessibility is already granted for NotesBridge.")
         } else if isRunningBundledApp {
             _ = permissionsManager.openAccessibilitySettings()
-            statusMessage = "Open Privacy & Security > Accessibility and enable NotesBridge. If it is missing, add ~/Library/Application Support/NotesBridge/NotesBridge.app manually."
+            statusMessage = t("Open Privacy & Security > Accessibility and enable NotesBridge. If it is missing, add ~/Library/Application Support/NotesBridge/NotesBridge.app manually.")
         } else {
             _ = permissionsManager.openAccessibilitySettings()
-            statusMessage = "Open Privacy & Security > Accessibility and enable NotesBridge."
+            statusMessage = t("Open Privacy & Security > Accessibility and enable NotesBridge.")
         }
     }
 
@@ -327,14 +350,14 @@ final class AppModel: ObservableObject {
             return
         }
 
-        statusMessage = "Requesting Input Monitoring permission for slash menu keyboard navigation..."
+        statusMessage = t("Requesting Input Monitoring permission for slash menu keyboard navigation...")
         permissionsManager.requestInputMonitoringPermission()
         notesContextMonitor.updateSettings(settings)
         if interactionAvailability.inputMonitoringGranted {
-            statusMessage = "Input Monitoring is already granted for NotesBridge."
+            statusMessage = t("Input Monitoring is already granted for NotesBridge.")
         } else {
             _ = permissionsManager.openInputMonitoringSettings()
-            statusMessage = "Open Privacy & Security > Input Monitoring to enable slash menu keyboard navigation for NotesBridge."
+            statusMessage = t("Open Privacy & Security > Input Monitoring to enable slash menu keyboard navigation for NotesBridge.")
         }
     }
 
@@ -344,8 +367,8 @@ final class AppModel: ObservableObject {
 
     func relaunchAsBundledApp(requestInputMonitoringOnLaunch: Bool = false) {
         statusMessage = requestInputMonitoringOnLaunch
-            ? "Relaunching NotesBridge as a bundled app so macOS can grant Input Monitoring..."
-            : "Relaunching NotesBridge as a bundled app..."
+            ? t("Relaunching NotesBridge as a bundled app so macOS can grant Input Monitoring...")
+            : t("Relaunching NotesBridge as a bundled app...")
 
         bundledAppLauncher.relaunchCurrentExecutableAsBundledApp(
             requestInputMonitoringOnLaunch: requestInputMonitoringOnLaunch
@@ -354,15 +377,15 @@ final class AppModel: ObservableObject {
             case .success:
                 NSApplication.shared.terminate(nil)
             case let .failure(error):
-                self?.present(error, fallback: "Failed to relaunch NotesBridge as a bundled app.")
+                self?.present(error, fallback: self?.t("Failed to relaunch NotesBridge as a bundled app.") ?? "Failed to relaunch NotesBridge as a bundled app.")
             }
         }
     }
 
     func chooseVaultDirectory() {
         let panel = NSOpenPanel()
-        panel.title = "Choose an Obsidian vault"
-        panel.prompt = "Use Vault"
+        panel.title = t("Choose an Obsidian vault")
+        panel.prompt = t("Use Vault")
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
@@ -370,7 +393,7 @@ final class AppModel: ObservableObject {
 
         guard panel.runModal() == .OK, let url = panel.url else { return }
         settings.vaultPath = url.path
-        statusMessage = "Obsidian vault set to \(url.lastPathComponent)."
+        statusMessage = tf("Obsidian vault set to %@.", url.lastPathComponent)
     }
 
     func chooseAppleNotesDataFolder() {
@@ -391,12 +414,12 @@ final class AppModel: ObservableObject {
             settings.appleNotesDataPath = selection.rootURL.path
             settings.appleNotesDataBookmark = bookmarkData
             refreshAppleNotesDataAccessStatus()
-            statusMessage = "Apple Notes data folder set to \(selection.rootURL.lastPathComponent)."
+            statusMessage = tf("Apple Notes data folder set to %@.", selection.rootURL.lastPathComponent)
         } catch {
             AppLog.access.error(
                 "Failed to select Apple Notes data folder: \(error.localizedDescription, privacy: .public)"
             )
-            present(error, fallback: "Failed to access Apple Notes data folder.")
+            present(error, fallback: t("Failed to access Apple Notes data folder."))
         }
     }
 
@@ -420,7 +443,7 @@ final class AppModel: ObservableObject {
         }
 
         guard let selectedURL = appleNotesDataFolderSelector.chooseAppleNotesDataFolder() else {
-            presentMessage("Sync cancelled. Choose the Apple Notes data folder to continue.")
+            presentMessage(t("Sync cancelled. Choose the Apple Notes data folder to continue."))
             return nil
         }
 
@@ -434,7 +457,7 @@ final class AppModel: ObservableObject {
             settings.appleNotesDataPath = selection.rootURL.path
             settings.appleNotesDataBookmark = bookmarkData
             refreshAppleNotesDataAccessStatus()
-            statusMessage = "Apple Notes data folder set to \(selection.rootURL.lastPathComponent)."
+            statusMessage = tf("Apple Notes data folder set to %@.", selection.rootURL.lastPathComponent)
             return (
                 selection,
                 makeAppleNotesDataFolderAccessSession(
@@ -443,7 +466,7 @@ final class AppModel: ObservableObject {
                 )
             )
         } catch {
-            present(error, fallback: "Failed to access Apple Notes data folder.")
+            present(error, fallback: t("Failed to access Apple Notes data folder."))
             return nil
         }
     }
@@ -462,7 +485,7 @@ final class AppModel: ObservableObject {
         let appleNotesDataPath = self.settings.appleNotesDataPath
         let appleNotesDataBookmark = self.settings.appleNotesDataBookmark
         isRefreshingFolders = true
-        statusMessage = "Refreshing Apple Notes folders..."
+        statusMessage = t("Refreshing Apple Notes folders...")
 
         defer {
             isRefreshingFolders = false
@@ -485,15 +508,15 @@ final class AppModel: ObservableObject {
             folderSummaries = fetchedFolders.sorted {
                 $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
             }
-            statusMessage = "Loaded \(folderSummaries.count) Apple Notes folders."
+            statusMessage = tf("Loaded %lld Apple Notes folders.", folderSummaries.count)
         } catch {
-            present(error, fallback: "Failed to refresh Apple Notes folders.")
+            present(error, fallback: t("Failed to refresh Apple Notes folders."))
         }
     }
 
     func syncAllNotes() async {
         guard hasVaultConfigured else {
-            presentMessage("Choose an Obsidian vault before syncing.")
+            presentMessage(t("Choose an Obsidian vault before syncing."))
             return
         }
 
@@ -514,7 +537,7 @@ final class AppModel: ObservableObject {
         startSyncAnimation()
         syncProgress = nil
         errorMessage = nil
-        statusMessage = "Syncing Apple Notes to Obsidian..."
+        statusMessage = t("Syncing Apple Notes to Obsidian...")
 
         defer {
             isSyncing = false
@@ -839,9 +862,9 @@ final class AppModel: ObservableObject {
             let timingSummary = result.timings.summary(persistIndex: persistDuration)
             let diagnosticsSummary = result.diagnostics.summary
             print("Sync timings: \(timingSummary)")
-            statusMessage = "Synced \(result.records.count) note(s) across \(result.exportedFolderCount) folder(s). \(timingSummary)\(diagnosticsSummary.isEmpty ? "" : " \(diagnosticsSummary)")"
+            statusMessage = "\(tf("Synced %lld note(s) across %lld folder(s).", result.records.count, result.exportedFolderCount)) \(timingSummary)\(diagnosticsSummary.isEmpty ? "" : " \(diagnosticsSummary)")"
         } catch {
-            present(error, fallback: "Failed to sync Apple Notes to Obsidian.")
+            present(error, fallback: t("Failed to sync Apple Notes to Obsidian."))
         }
     }
 
@@ -849,7 +872,7 @@ final class AppModel: ObservableObject {
         do {
             try persistence.saveSettings(settings)
         } catch {
-            present(error, fallback: "Failed to save app settings.")
+            present(error, fallback: t("Failed to save app settings."))
         }
     }
 

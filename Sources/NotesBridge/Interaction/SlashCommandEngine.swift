@@ -8,6 +8,7 @@ final class SlashCommandEngine {
     private let parser = SlashCommandParser()
     var onKeyboardNavigationAvailabilityChanged: ((Bool) -> Void)?
     var onDiagnosticsChanged: (([String]) -> Void)?
+    var localizationProvider: (() -> AppLocalization)?
 
     private lazy var menuController = SlashCommandMenuController(
         onHoverIndex: { [weak self] index in
@@ -145,6 +146,7 @@ final class SlashCommandEngine {
 
         menuController.update(
             entries: menuMatch.entries,
+            localization: localizationProvider?() ?? AppLocalization(language: .system),
             selectedIndex: selectedIndex,
             anchorRect: menuAnchorRect(for: snapshot)
         )
@@ -170,6 +172,7 @@ final class SlashCommandEngine {
         selectedIndex = index
         menuController.update(
             entries: menuMatch.entries,
+            localization: localizationProvider?() ?? AppLocalization(language: .system),
             selectedIndex: selectedIndex,
             anchorRect: currentEditingContext.flatMap(menuAnchorRect)
         )
@@ -205,6 +208,7 @@ final class SlashCommandEngine {
             selectedIndex = (selectedIndex - 1 + menuMatch.entries.count) % menuMatch.entries.count
             menuController.update(
                 entries: menuMatch.entries,
+                localization: localizationProvider?() ?? AppLocalization(language: .system),
                 selectedIndex: selectedIndex,
                 anchorRect: currentEditingContext.flatMap(menuAnchorRect)
             )
@@ -212,6 +216,7 @@ final class SlashCommandEngine {
             selectedIndex = (selectedIndex + 1) % menuMatch.entries.count
             menuController.update(
                 entries: menuMatch.entries,
+                localization: localizationProvider?() ?? AppLocalization(language: .system),
                 selectedIndex: selectedIndex,
                 anchorRect: currentEditingContext.flatMap(menuAnchorRect)
             )

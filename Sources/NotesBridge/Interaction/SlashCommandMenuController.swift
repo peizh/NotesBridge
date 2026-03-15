@@ -13,6 +13,7 @@ final class SlashCommandMenuController {
     private var lastEntries: [SlashCommandEntry] = []
     private var lastSelectedIndex = 0
     private var lastFrame: CGRect?
+    private var lastLocalization = AppLocalization(language: .system)
 
     init(
         onHoverIndex: @escaping (Int) -> Void,
@@ -28,15 +29,16 @@ final class SlashCommandMenuController {
         self.onPassthroughKeyDown = onPassthroughKeyDown
     }
 
-    func update(entries: [SlashCommandEntry], selectedIndex: Int, anchorRect: CGRect?) {
+    func update(entries: [SlashCommandEntry], localization: AppLocalization, selectedIndex: Int, anchorRect: CGRect?) {
         let panel = ensurePanel()
-        let contentChanged = lastEntries != entries || lastSelectedIndex != selectedIndex
+        let contentChanged = lastEntries != entries || lastSelectedIndex != selectedIndex || lastLocalization.language != localization.language
         if contentChanged {
-            hostingController?.rootView = rootView(entries: entries, selectedIndex: selectedIndex)
+            hostingController?.rootView = rootView(entries: entries, localization: localization, selectedIndex: selectedIndex)
             hostingController?.view.layoutSubtreeIfNeeded()
             panel.contentView?.layoutSubtreeIfNeeded()
             lastEntries = entries
             lastSelectedIndex = selectedIndex
+            lastLocalization = localization
         }
 
         let fittedSize = hostingController?.view.fittingSize ?? CGSize(width: 320, height: 120)
@@ -83,7 +85,7 @@ final class SlashCommandMenuController {
             return panel
         }
 
-        let hostingController = NSHostingController(rootView: rootView(entries: [], selectedIndex: 0))
+        let hostingController = NSHostingController(rootView: rootView(entries: [], localization: lastLocalization, selectedIndex: 0))
         let panel = SlashCommandPanel(
             contentRect: CGRect(x: 0, y: 0, width: 320, height: 120),
             styleMask: [.borderless, .nonactivatingPanel],
@@ -108,9 +110,10 @@ final class SlashCommandMenuController {
         return panel
     }
 
-    private func rootView(entries: [SlashCommandEntry], selectedIndex: Int) -> SlashCommandMenuView {
+    private func rootView(entries: [SlashCommandEntry], localization: AppLocalization, selectedIndex: Int) -> SlashCommandMenuView {
         SlashCommandMenuView(
             entries: entries,
+            localization: localization,
             selectedIndex: selectedIndex,
             onHoverIndex: onHoverIndex,
             onSelectIndex: onSelectIndex

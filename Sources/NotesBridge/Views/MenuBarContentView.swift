@@ -8,18 +8,18 @@ struct MenuBarContentView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("NotesBridge")
+                Text(appModel.t("NotesBridge"))
                     .font(.headline)
-                Text(appModel.buildFlavor.title)
+                Text(appModel.localizedBuildFlavorTitle)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                statusRow(title: "Inline", value: appModel.inlineEnhancementsSummary)
-                statusRow(title: "Slash", value: appModel.slashCommandsSummary)
-                statusRow(title: "Selection", value: appModel.selectionSummary)
-                statusRow(title: "Sync", value: "Last full sync: \(appModel.lastFullSyncLabel)")
+                statusRow(title: appModel.t("Inline"), value: appModel.inlineEnhancementsSummary)
+                statusRow(title: appModel.t("Slash"), value: appModel.slashCommandsSummary)
+                statusRow(title: appModel.t("Selection"), value: appModel.selectionSummary)
+                statusRow(title: appModel.t("Sync"), value: appModel.tf("Last full sync: %@", appModel.lastFullSyncLabel))
             }
 
             Divider()
@@ -28,7 +28,7 @@ struct MenuBarContentView: View {
                 Button {
                     appModel.openAppleNotes()
                 } label: {
-                    Label("Open Apple Notes", systemImage: "note.text")
+                    Label(appModel.t("Open Apple Notes"), systemImage: "note.text")
                 }
 
                 Button {
@@ -37,7 +37,7 @@ struct MenuBarContentView: View {
                     }
                 } label: {
                     Label(
-                        appModel.isSyncing ? "Syncing Notes..." : "Sync All Notes to Obsidian",
+                        appModel.isSyncing ? appModel.t("Syncing Notes...") : appModel.t("Sync All Notes to Obsidian"),
                         systemImage: "arrow.triangle.2.circlepath"
                     )
                 }
@@ -46,14 +46,14 @@ struct MenuBarContentView: View {
                 Button {
                     openSettingsWindow()
                 } label: {
-                    Label("Open Settings", systemImage: "gearshape")
+                    Label(appModel.t("Open Settings"), systemImage: "gearshape")
                 }
 
                 if !appModel.isRunningBundledApp && appModel.buildFlavor.supportsInlineEnhancements {
                     Button {
                         appModel.relaunchAsBundledApp()
                     } label: {
-                        Label("Relaunch as Bundled App", systemImage: "app.badge")
+                        Label(appModel.t("Relaunch as Bundled App"), systemImage: "app.badge")
                     }
                 }
             }
@@ -63,19 +63,19 @@ struct MenuBarContentView: View {
             Button(role: .destructive) {
                 NSApplication.shared.terminate(nil)
             } label: {
-                Label("Quit NotesBridge", systemImage: "xmark.circle")
+                Label(appModel.t("Quit NotesBridge"), systemImage: "xmark.circle")
             }
         }
         .padding(14)
         .frame(width: 360)
         .alert(
-            "NotesBridge",
+            appModel.t("NotesBridge"),
             isPresented: Binding(
                 get: { appModel.errorMessage != nil },
                 set: { if !$0 { appModel.errorMessage = nil } }
             )
         ) {
-            Button("OK", role: .cancel) {
+            Button(appModel.t("OK"), role: .cancel) {
                 appModel.errorMessage = nil
             }
         } message: {
