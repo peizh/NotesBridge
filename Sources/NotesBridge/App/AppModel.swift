@@ -313,7 +313,7 @@ final class AppModel: ObservableObject {
     }
 
     func tf(_ key: String, _ arguments: CVarArg...) -> String {
-        localization.text(key, arguments)
+        localization.text(key, arguments: arguments)
     }
 
     func languageDisplayName(for language: AppLanguage) -> String {

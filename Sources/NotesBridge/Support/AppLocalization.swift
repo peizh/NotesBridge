@@ -38,6 +38,10 @@ struct AppLocalization: Sendable {
         String(format: text(key), locale: locale, arguments: arguments)
     }
 
+    func text(_ key: String, arguments: [CVarArg]) -> String {
+        String(format: text(key), locale: locale, arguments: arguments)
+    }
+
     func languageDisplayName(for language: AppLanguage) -> String {
         switch language {
         case .system:
