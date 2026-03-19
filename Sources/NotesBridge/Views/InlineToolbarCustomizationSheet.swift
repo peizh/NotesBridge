@@ -88,7 +88,7 @@ struct InlineToolbarCustomizationSheet: View {
         .padding(.vertical, 8)
         .opacity(draggedCommand == item.command ? 0.55 : 1)
         .onDrop(
-            of: [UTType.plainText.identifier],
+            of: [.plainText],
             delegate: InlineToolbarItemDropDelegate(
                 targetCommand: item.command,
                 items: $items,
