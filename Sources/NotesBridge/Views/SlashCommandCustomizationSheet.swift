@@ -28,6 +28,10 @@ struct SlashCommandCustomizationSheet: View {
                     }
                 }
             }
+            .onDrop(of: [.plainText], isTargeted: nil) { _, _ in
+                draggedCommand = nil
+                return false
+            }
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(Color(nsColor: .controlBackgroundColor))
