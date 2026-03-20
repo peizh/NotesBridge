@@ -9,7 +9,7 @@ struct SlashCommandCustomizationSheet: View {
     @State private var draggedCommand: FormattingCommand?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(localization.text("Customize Slash Commands"))
                     .font(.title3.weight(.semibold))
@@ -32,14 +32,7 @@ struct SlashCommandCustomizationSheet: View {
                 draggedCommand = nil
                 return false
             }
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(nsColor: .controlBackgroundColor))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(.quaternary)
-            )
+            .notesBridgeGlassCard(cornerRadius: NotesBridgeGlassStyle.compactCardCornerRadius)
 
             HStack {
                 Spacer()
@@ -54,8 +47,9 @@ struct SlashCommandCustomizationSheet: View {
                 .keyboardShortcut(.defaultAction)
             }
         }
-        .padding(18)
-        .frame(width: 460, height: 380)
+        .padding(16)
+        .background(.regularMaterial)
+        .frame(width: 440, height: 360)
     }
 
     private func visibilityBinding(for command: FormattingCommand) -> Binding<Bool> {
@@ -94,8 +88,8 @@ struct SlashCommandCustomizationSheet: View {
 
             Spacer()
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
         .opacity(draggedCommand == item.command ? 0.55 : 1)
         .onDrop(
             of: [.plainText],
