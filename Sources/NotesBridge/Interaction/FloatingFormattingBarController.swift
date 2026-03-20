@@ -6,27 +6,21 @@ final class FloatingFormattingBarController {
     private let executor: FormattingCommandExecutor
     private var panel: NSPanel?
     private var hostingController: NSHostingController<FormattingBarView>?
-    private let commands: [FormattingCommand] = [
-        .title,
-        .heading,
-        .subheading,
-        .body,
-        .bold,
-        .insertLink,
-        .checklist,
-        .bulletedList,
-        .dashedList,
-        .numberedList,
-    ]
 
     init(executor: FormattingCommandExecutor) {
         self.executor = executor
     }
 
-    func update(selectionContext: SelectionContext?, availability: InteractionAvailability) {
+    func update(
+        selectionContext: SelectionContext?,
+        availability: InteractionAvailability,
+        commands: [FormattingCommand],
+        localization: AppLocalization
+    ) {
         guard availability.canShowFormattingBar,
               let selectionContext,
-              selectionContext.hasSelection
+              selectionContext.hasSelection,
+              !commands.isEmpty
         else {
             hide()
             return
@@ -34,12 +28,12 @@ final class FloatingFormattingBarController {
 
         let anchorRect = selectionContext.selectionRect.map(convertAccessibilityRectToAppKit) ?? CGRect(origin: NSEvent.mouseLocation, size: .zero)
         let panel = ensurePanel()
-        hostingController?.rootView = FormattingBarView(commands: commands) { [weak self] command in
+        hostingController?.rootView = FormattingBarView(commands: commands, localization: localization) { [weak self] command in
             self?.executor.perform(command)
             self?.hide()
         }
 
-        let size = hostingController?.view.fittingSize ?? CGSize(width: 700, height: 56)
+        let size = hostingController?.view.fittingSize ?? CGSize(width: 420, height: 46)
         let targetScreen = screen(containing: anchorRect) ?? NSScreen.main
         let visibleFrame = targetScreen?.visibleFrame ?? NSScreen.screens.reduce(CGRect.null) { partialResult, screen in
             partialResult.union(screen.visibleFrame)
@@ -59,13 +53,13 @@ final class FloatingFormattingBarController {
             return panel
         }
 
-        let rootView = FormattingBarView(commands: commands) { [weak self] command in
+        let rootView = FormattingBarView(commands: [], localization: AppLocalization(language: .system)) { [weak self] command in
             self?.executor.perform(command)
             self?.hide()
         }
         let hostingController = NSHostingController(rootView: rootView)
         let panel = NSPanel(
-            contentRect: CGRect(x: 0, y: 0, width: 700, height: 56),
+            contentRect: CGRect(x: 0, y: 0, width: 420, height: 46),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false

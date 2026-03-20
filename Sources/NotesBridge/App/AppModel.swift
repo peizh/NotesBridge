@@ -82,6 +82,12 @@ final class AppModel: ObservableObject {
             persistSettings()
             notesContextMonitor.updateSettings(settings)
             refreshAppleNotesDataAccessStatus()
+            formattingBarController.update(
+                selectionContext: selectionContext,
+                availability: interactionAvailability,
+                commands: visibleInlineToolbarCommands,
+                localization: localization
+            )
         }
     }
 
@@ -241,6 +247,12 @@ final class AppModel: ObservableObject {
         return snippet.isEmpty ? t("Selected text ready") : snippet
     }
 
+    var visibleInlineToolbarCommands: [FormattingCommand] {
+        settings.inlineToolbarItems
+            .filter(\.isVisible)
+            .map(\.command)
+    }
+
     var menuBarSymbolName: String {
         if isSyncing {
             return "arrow.triangle.2.circlepath"
@@ -318,6 +330,10 @@ final class AppModel: ObservableObject {
 
     func languageDisplayName(for language: AppLanguage) -> String {
         localization.languageDisplayName(for: language)
+    }
+
+    func resetInlineToolbarItems() {
+        settings.inlineToolbarItems = InlineToolbarItemSetting.default
     }
 
     func requestAccessibilityPermission() {
@@ -884,7 +900,9 @@ final class AppModel: ObservableObject {
                 self.interactionAvailability = availability
                 self.formattingBarController.update(
                     selectionContext: self.selectionContext,
-                    availability: availability
+                    availability: availability,
+                    commands: self.visibleInlineToolbarCommands,
+                    localization: self.localization
                 )
             }
             .store(in: &cancellables)
@@ -896,7 +914,9 @@ final class AppModel: ObservableObject {
                 self.selectionContext = selectionContext
                 self.formattingBarController.update(
                     selectionContext: selectionContext,
-                    availability: self.interactionAvailability
+                    availability: self.interactionAvailability,
+                    commands: self.visibleInlineToolbarCommands,
+                    localization: self.localization
                 )
             }
             .store(in: &cancellables)

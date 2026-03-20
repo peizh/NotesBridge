@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var appModel: AppModel
+    @State private var showingInlineToolbarCustomization = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -88,31 +89,44 @@ struct SettingsView: View {
                     )
                     .disabled(!appModel.buildFlavor.supportsInlineEnhancements)
 
-                    Toggle(
-                        appModel.t("Show formatting bar for selected text"),
-                        isOn: Binding(
-                            get: { appModel.settings.enableFormattingBar },
-                            set: { appModel.settings.enableFormattingBar = $0 }
-                        )
-                    )
+                    LabeledContent(appModel.t("Inline Toolbar")) {
+                        HStack(spacing: 12) {
+                            Toggle(
+                                appModel.t("Enable Inline Toolbar"),
+                                isOn: Binding(
+                                    get: { appModel.settings.enableFormattingBar },
+                                    set: { appModel.settings.enableFormattingBar = $0 }
+                                )
+                            )
+
+                            Button(appModel.t("Customize...")) {
+                                showingInlineToolbarCustomization = true
+                            }
+                            .disabled(!appModel.settings.enableFormattingBar)
+                        }
+                    }
                     .disabled(!appModel.buildFlavor.supportsInlineEnhancements || !appModel.settings.enableInlineEnhancements)
 
-                    Toggle(
-                        appModel.t("Enable markdown and list triggers at line start"),
-                        isOn: Binding(
-                            get: { appModel.settings.enableMarkdownTriggers },
-                            set: { appModel.settings.enableMarkdownTriggers = $0 }
+                    LabeledContent(appModel.t("Slash Commands")) {
+                        Toggle(
+                            appModel.t("Enable slash commands"),
+                            isOn: Binding(
+                                get: { appModel.settings.enableSlashCommands },
+                                set: { appModel.settings.enableSlashCommands = $0 }
+                            )
                         )
-                    )
+                    }
                     .disabled(!appModel.buildFlavor.supportsInlineEnhancements || !appModel.settings.enableInlineEnhancements)
 
-                    Toggle(
-                        appModel.t("Enable slash commands"),
-                        isOn: Binding(
-                            get: { appModel.settings.enableSlashCommands },
-                            set: { appModel.settings.enableSlashCommands = $0 }
+                    LabeledContent(appModel.t("Markdown")) {
+                        Toggle(
+                            appModel.t("Enable Markdown"),
+                            isOn: Binding(
+                                get: { appModel.settings.enableMarkdownTriggers },
+                                set: { appModel.settings.enableMarkdownTriggers = $0 }
+                            )
                         )
-                    )
+                    }
                     .disabled(!appModel.buildFlavor.supportsInlineEnhancements || !appModel.settings.enableInlineEnhancements)
 
                     Text(appModel.t("Use / to open slash suggestions, or type an exact slash command and press Space to apply it inline."))
@@ -275,6 +289,21 @@ struct SettingsView: View {
             .formStyle(.grouped)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .sheet(isPresented: $showingInlineToolbarCustomization) {
+            InlineToolbarCustomizationSheet(
+                items: Binding(
+                    get: { appModel.settings.inlineToolbarItems },
+                    set: { appModel.settings.inlineToolbarItems = InlineToolbarItemSetting.normalized($0) }
+                ),
+                localization: appModel.localization,
+                onReset: {
+                    appModel.resetInlineToolbarItems()
+                },
+                onDone: {
+                    showingInlineToolbarCustomization = false
+                }
+            )
+        }
     }
 
     private var appleNotesAccessColor: Color {

@@ -6,12 +6,13 @@ struct KeyboardShortcutSpec: Sendable {
     let modifiers: CGEventFlags
 }
 
-enum FormattingCommand: String, CaseIterable, Identifiable, Sendable {
+enum FormattingCommand: String, CaseIterable, Codable, Identifiable, Sendable {
     case title
     case heading
     case subheading
     case body
     case bold
+    case strikethrough
     case insertLink
     case checklist
     case bulletedList
@@ -35,6 +36,8 @@ enum FormattingCommand: String, CaseIterable, Identifiable, Sendable {
             "Body"
         case .bold:
             "Bold"
+        case .strikethrough:
+            "Strike"
         case .insertLink:
             "Link"
         case .checklist:
@@ -54,6 +57,39 @@ enum FormattingCommand: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
+    var titleKey: String {
+        switch self {
+        case .title:
+            "Title"
+        case .heading:
+            "Heading"
+        case .subheading:
+            "Subheading"
+        case .body:
+            "Body"
+        case .bold:
+            "Bold"
+        case .strikethrough:
+            "Strikethrough"
+        case .insertLink:
+            "Link"
+        case .checklist:
+            "Checklist"
+        case .bulletedList:
+            "Bulleted List"
+        case .dashedList:
+            "Dashed List"
+        case .numberedList:
+            "Numbered List"
+        case .quote:
+            "Block Quote"
+        case .monostyled:
+            "Monostyled"
+        case .table:
+            "Table"
+        }
+    }
+
     var accessibilityLabel: String {
         switch self {
         case .title:
@@ -66,6 +102,8 @@ enum FormattingCommand: String, CaseIterable, Identifiable, Sendable {
             "Apply Body"
         case .bold:
             "Toggle Bold"
+        case .strikethrough:
+            "Toggle Strikethrough"
         case .insertLink:
             "Insert Link"
         case .checklist:
@@ -97,6 +135,8 @@ enum FormattingCommand: String, CaseIterable, Identifiable, Sendable {
             "paragraph"
         case .bold:
             "bold"
+        case .strikethrough:
+            "strikethrough"
         case .insertLink:
             "link"
         case .checklist:
@@ -116,7 +156,7 @@ enum FormattingCommand: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    var shortcut: KeyboardShortcutSpec {
+    var shortcut: KeyboardShortcutSpec? {
         switch self {
         case .title:
             KeyboardShortcutSpec(keyCode: 17, modifiers: [.maskCommand, .maskShift])
@@ -128,6 +168,8 @@ enum FormattingCommand: String, CaseIterable, Identifiable, Sendable {
             KeyboardShortcutSpec(keyCode: 11, modifiers: [.maskCommand, .maskShift])
         case .bold:
             KeyboardShortcutSpec(keyCode: 11, modifiers: [.maskCommand])
+        case .strikethrough:
+            nil
         case .insertLink:
             KeyboardShortcutSpec(keyCode: 40, modifiers: [.maskCommand])
         case .checklist:

@@ -27,7 +27,10 @@ final class FormattingCommandExecutor {
         if await performViaMenuItem(command) {
             return
         }
-        postShortcut(command.shortcut, to: notesPID)
+        guard let shortcut = command.shortcut else {
+            return
+        }
+        postShortcut(shortcut, to: notesPID)
     }
 
     func applyMarkdownTrigger(literalLength: Int, command: FormattingCommand) async {
@@ -82,7 +85,7 @@ final class FormattingCommandExecutor {
         let script = """
         tell application "System Events"
           tell process "Notes"
-            click menu item \(appleScriptStringLiteral(invocation.menuItem)) of menu 1 of menu bar item \(appleScriptStringLiteral(invocation.menuBarItem)) of menu bar 1
+            \(appleScriptClickStatement(for: invocation))
           end tell
         end tell
         """
@@ -97,32 +100,34 @@ final class FormattingCommandExecutor {
         }.value
     }
 
-    private func menuInvocation(for command: FormattingCommand) -> (menuBarItem: String, menuItem: String)? {
+    private func menuInvocation(for command: FormattingCommand) -> (menuBarItem: String, menuItems: [String])? {
         switch command {
         case .title:
-            ("Format", "Title")
+            ("Format", ["Title"])
         case .heading:
-            ("Format", "Heading")
+            ("Format", ["Heading"])
         case .subheading:
-            ("Format", "Subheading")
+            ("Format", ["Subheading"])
         case .body:
-            ("Format", "Body")
+            ("Format", ["Body"])
         case .checklist:
-            ("Format", "Checklist")
+            ("Format", ["Checklist"])
         case .bulletedList:
-            ("Format", "Bulleted List")
+            ("Format", ["Bulleted List"])
         case .dashedList:
-            ("Format", "Dashed List")
+            ("Format", ["Dashed List"])
         case .numberedList:
-            ("Format", "Numbered List")
+            ("Format", ["Numbered List"])
         case .quote:
-            ("Format", "Block Quote")
+            ("Format", ["Block Quote"])
         case .monostyled:
-            ("Format", "Monostyled")
+            ("Format", ["Monostyled"])
         case .table:
-            ("Format", "Table")
+            ("Format", ["Table"])
         case .insertLink:
-            ("Edit", "Add Link…")
+            ("Edit", ["Add Link…"])
+        case .strikethrough:
+            ("Format", ["Font", "Strikethrough"])
         case .bold:
             nil
         }
@@ -133,6 +138,21 @@ final class FormattingCommandExecutor {
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
         return "\"\(escaped)\""
+    }
+
+    private func appleScriptClickStatement(
+        for invocation: (menuBarItem: String, menuItems: [String])
+    ) -> String {
+        guard let lastItem = invocation.menuItems.last else {
+            return ""
+        }
+
+        var container = "menu 1 of menu bar item \(appleScriptStringLiteral(invocation.menuBarItem)) of menu bar 1"
+        for item in invocation.menuItems.dropLast() {
+            container = "menu 1 of menu item \(appleScriptStringLiteral(item)) of \(container)"
+        }
+
+        return "click menu item \(appleScriptStringLiteral(lastItem)) of \(container)"
     }
 
     private func deleteBackward(count: Int, to pid: pid_t) {

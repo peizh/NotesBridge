@@ -25,6 +25,7 @@ struct AppSettings: Codable, Equatable, Sendable {
     var syncDirection: SyncDirection
     var enableInlineEnhancements: Bool
     var enableFormattingBar: Bool
+    var inlineToolbarItems: [InlineToolbarItemSetting]
     var enableMarkdownTriggers: Bool
     var enableSlashCommands: Bool
 
@@ -40,6 +41,7 @@ struct AppSettings: Codable, Equatable, Sendable {
         syncDirection: .appleNotesToObsidian,
         enableInlineEnhancements: true,
         enableFormattingBar: true,
+        inlineToolbarItems: InlineToolbarItemSetting.default,
         enableMarkdownTriggers: true,
         enableSlashCommands: true
     )
@@ -61,6 +63,7 @@ struct AppSettings: Codable, Equatable, Sendable {
         case syncDirection
         case enableInlineEnhancements
         case enableFormattingBar
+        case inlineToolbarItems
         case enableMarkdownTriggers
         case enableSlashCommands
     }
@@ -77,6 +80,7 @@ struct AppSettings: Codable, Equatable, Sendable {
         syncDirection: SyncDirection,
         enableInlineEnhancements: Bool,
         enableFormattingBar: Bool,
+        inlineToolbarItems: [InlineToolbarItemSetting],
         enableMarkdownTriggers: Bool,
         enableSlashCommands: Bool
     ) {
@@ -91,6 +95,7 @@ struct AppSettings: Codable, Equatable, Sendable {
         self.syncDirection = syncDirection
         self.enableInlineEnhancements = enableInlineEnhancements
         self.enableFormattingBar = enableFormattingBar
+        self.inlineToolbarItems = InlineToolbarItemSetting.normalized(inlineToolbarItems)
         self.enableMarkdownTriggers = enableMarkdownTriggers
         self.enableSlashCommands = enableSlashCommands
     }
@@ -108,6 +113,10 @@ struct AppSettings: Codable, Equatable, Sendable {
         self.syncDirection = try container.decodeIfPresent(SyncDirection.self, forKey: .syncDirection) ?? Self.default.syncDirection
         self.enableInlineEnhancements = try container.decodeIfPresent(Bool.self, forKey: .enableInlineEnhancements) ?? Self.default.enableInlineEnhancements
         self.enableFormattingBar = try container.decodeIfPresent(Bool.self, forKey: .enableFormattingBar) ?? Self.default.enableFormattingBar
+        self.inlineToolbarItems = InlineToolbarItemSetting.normalized(
+            try container.decodeIfPresent([InlineToolbarItemSetting].self, forKey: .inlineToolbarItems)
+                ?? Self.default.inlineToolbarItems
+        )
         self.enableMarkdownTriggers = try container.decodeIfPresent(Bool.self, forKey: .enableMarkdownTriggers) ?? Self.default.enableMarkdownTriggers
         self.enableSlashCommands = try container.decodeIfPresent(Bool.self, forKey: .enableSlashCommands) ?? Self.default.enableSlashCommands
     }
@@ -125,6 +134,7 @@ struct AppSettings: Codable, Equatable, Sendable {
         try container.encode(syncDirection, forKey: .syncDirection)
         try container.encode(enableInlineEnhancements, forKey: .enableInlineEnhancements)
         try container.encode(enableFormattingBar, forKey: .enableFormattingBar)
+        try container.encode(InlineToolbarItemSetting.normalized(inlineToolbarItems), forKey: .inlineToolbarItems)
         try container.encode(enableMarkdownTriggers, forKey: .enableMarkdownTriggers)
         try container.encode(enableSlashCommands, forKey: .enableSlashCommands)
     }
