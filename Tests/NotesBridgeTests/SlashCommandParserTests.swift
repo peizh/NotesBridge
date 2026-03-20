@@ -17,12 +17,12 @@ struct SlashCommandParserTests {
 
     @Test
     func menuMatchesAliasesCaseInsensitively() {
-        let value = "Start /Co"
+        let value = "Start /StRi"
 
         let match = parser.menuMatch(in: value, caretLocation: value.count)
 
-        #expect(match?.token.rawValue == "/Co")
-        #expect(match?.entries.map(\.command) == [.monostyled])
+        #expect(match?.token.rawValue == "/StRi")
+        #expect(match?.entries.map(\.command) == [.strikethrough])
     }
 
     @Test
@@ -89,13 +89,13 @@ struct SlashCommandParserTests {
 
     @Test
     func commitMatchSupportsCaseInsensitiveAliases() {
-        let value = "/CoDe "
+        let value = "/StRiKe "
 
         let match = parser.commitMatchBeforeSpace(in: value, caretLocation: value.count)
 
-        #expect(match?.entry.command == .monostyled)
+        #expect(match?.entry.command == .strikethrough)
         #expect(match?.replacementRange.location == 0)
-        #expect(match?.replacementRange.length == 6)
+        #expect(match?.replacementRange.length == 8)
     }
 
     @Test
@@ -118,5 +118,35 @@ struct SlashCommandParserTests {
         let match = parser.commitMatchBeforeSpace(in: value, caretLocation: value.count)
 
         #expect(match == nil)
+    }
+
+    @Test
+    func hiddenCommandsAreExcludedFromMenuAndExactMatch() {
+        let customParser = SlashCommandParser(
+            catalog: SlashCommandCatalog(
+                itemSettings: [
+                    SlashCommandItemSetting(command: .title, isVisible: false),
+                    SlashCommandItemSetting(command: .heading, isVisible: true),
+                    SlashCommandItemSetting(command: .subheading, isVisible: true),
+                    SlashCommandItemSetting(command: .body, isVisible: true),
+                    SlashCommandItemSetting(command: .bold, isVisible: true),
+                    SlashCommandItemSetting(command: .strikethrough, isVisible: true),
+                    SlashCommandItemSetting(command: .insertLink, isVisible: true),
+                    SlashCommandItemSetting(command: .monostyled, isVisible: true),
+                    SlashCommandItemSetting(command: .checklist, isVisible: true),
+                    SlashCommandItemSetting(command: .bulletedList, isVisible: true),
+                    SlashCommandItemSetting(command: .dashedList, isVisible: true),
+                    SlashCommandItemSetting(command: .numberedList, isVisible: true),
+                    SlashCommandItemSetting(command: .quote, isVisible: true),
+                    SlashCommandItemSetting(command: .table, isVisible: true),
+                ]
+            )
+        )
+
+        let menuMatch = customParser.menuMatch(in: "/h", caretLocation: 2)
+        let commitMatch = customParser.commitMatchBeforeSpace(in: "/title ", caretLocation: 7)
+
+        #expect(menuMatch?.entries.map(\.command) == [.heading, .subheading])
+        #expect(commitMatch == nil)
     }
 }
