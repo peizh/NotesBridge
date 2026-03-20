@@ -6,19 +6,7 @@ struct SlashCommandItemSetting: Codable, Equatable, Identifiable, Sendable {
 
     var id: FormattingCommand { command }
 
-    static let defaultOrder: [FormattingCommand] = [
-        .title,
-        .heading,
-        .subheading,
-        .body,
-        .monostyled,
-        .checklist,
-        .bulletedList,
-        .dashedList,
-        .numberedList,
-        .quote,
-        .table,
-    ]
+    static let defaultOrder: [FormattingCommand] = SlashCommandCatalog.defaultEntries.map(\.command)
 
     static let defaultVisibleCommands = defaultOrder
 

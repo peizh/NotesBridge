@@ -17,12 +17,12 @@ struct SlashCommandParserTests {
 
     @Test
     func menuMatchesAliasesCaseInsensitively() {
-        let value = "Start /Co"
+        let value = "Start /StRi"
 
         let match = parser.menuMatch(in: value, caretLocation: value.count)
 
-        #expect(match?.token.rawValue == "/Co")
-        #expect(match?.entries.map(\.command) == [.monostyled])
+        #expect(match?.token.rawValue == "/StRi")
+        #expect(match?.entries.map(\.command) == [.strikethrough])
     }
 
     @Test
@@ -89,13 +89,13 @@ struct SlashCommandParserTests {
 
     @Test
     func commitMatchSupportsCaseInsensitiveAliases() {
-        let value = "/CoDe "
+        let value = "/StRiKe "
 
         let match = parser.commitMatchBeforeSpace(in: value, caretLocation: value.count)
 
-        #expect(match?.entry.command == .monostyled)
+        #expect(match?.entry.command == .strikethrough)
         #expect(match?.replacementRange.location == 0)
-        #expect(match?.replacementRange.length == 6)
+        #expect(match?.replacementRange.length == 8)
     }
 
     @Test
@@ -129,6 +129,9 @@ struct SlashCommandParserTests {
                     SlashCommandItemSetting(command: .heading, isVisible: true),
                     SlashCommandItemSetting(command: .subheading, isVisible: true),
                     SlashCommandItemSetting(command: .body, isVisible: true),
+                    SlashCommandItemSetting(command: .bold, isVisible: true),
+                    SlashCommandItemSetting(command: .strikethrough, isVisible: true),
+                    SlashCommandItemSetting(command: .insertLink, isVisible: true),
                     SlashCommandItemSetting(command: .monostyled, isVisible: true),
                     SlashCommandItemSetting(command: .checklist, isVisible: true),
                     SlashCommandItemSetting(command: .bulletedList, isVisible: true),
