@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject private var appModel: AppModel
     @State private var showingInlineToolbarCustomization = false
+    @State private var showingSlashCommandCustomization = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -108,13 +109,20 @@ struct SettingsView: View {
                     .disabled(!appModel.buildFlavor.supportsInlineEnhancements || !appModel.settings.enableInlineEnhancements)
 
                     LabeledContent(appModel.t("Slash Commands")) {
-                        Toggle(
-                            appModel.t("Enable slash commands"),
-                            isOn: Binding(
-                                get: { appModel.settings.enableSlashCommands },
-                                set: { appModel.settings.enableSlashCommands = $0 }
+                        HStack(spacing: 12) {
+                            Toggle(
+                                appModel.t("Enable slash commands"),
+                                isOn: Binding(
+                                    get: { appModel.settings.enableSlashCommands },
+                                    set: { appModel.settings.enableSlashCommands = $0 }
+                                )
                             )
-                        )
+
+                            Button(appModel.t("Customize...")) {
+                                showingSlashCommandCustomization = true
+                            }
+                            .disabled(!appModel.settings.enableSlashCommands)
+                        }
                     }
                     .disabled(!appModel.buildFlavor.supportsInlineEnhancements || !appModel.settings.enableInlineEnhancements)
 
@@ -131,11 +139,6 @@ struct SettingsView: View {
 
                     Text(appModel.t("Use / to open slash suggestions, or type an exact slash command and press Space to apply it inline."))
                         .foregroundStyle(.secondary)
-
-                    if appModel.settings.enableSlashCommands && !appModel.slashKeyboardNavigationAvailable {
-                        Text(appModel.t("Keyboard slash navigation is unavailable in the current build. Use the mouse, or type an exact slash command and press Space."))
-                            .foregroundStyle(.secondary)
-                    }
 
                     Text(appModel.t("Inline enhancements support the formatting bar, markdown/list triggers, and slash commands."))
                         .foregroundStyle(.secondary)
@@ -301,6 +304,21 @@ struct SettingsView: View {
                 },
                 onDone: {
                     showingInlineToolbarCustomization = false
+                }
+            )
+        }
+        .sheet(isPresented: $showingSlashCommandCustomization) {
+            SlashCommandCustomizationSheet(
+                items: Binding(
+                    get: { appModel.settings.slashCommandItems },
+                    set: { appModel.settings.slashCommandItems = SlashCommandItemSetting.normalized($0) }
+                ),
+                localization: appModel.localization,
+                onReset: {
+                    appModel.resetSlashCommandItems()
+                },
+                onDone: {
+                    showingSlashCommandCustomization = false
                 }
             )
         }

@@ -1,8 +1,8 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-struct InlineToolbarCustomizationSheet: View {
-    @Binding var items: [InlineToolbarItemSetting]
+struct SlashCommandCustomizationSheet: View {
+    @Binding var items: [SlashCommandItemSetting]
     let localization: AppLocalization
     let onReset: () -> Void
     let onDone: () -> Void
@@ -11,22 +11,26 @@ struct InlineToolbarCustomizationSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(localization.text("Customize Inline Toolbar"))
+                Text(localization.text("Customize Slash Commands"))
                     .font(.title3.weight(.semibold))
-                Text(localization.text("Reorder items and choose which ones are visible in the inline toolbar."))
+                Text(localization.text("Reorder slash commands and choose which ones are visible in the slash menu."))
                     .foregroundStyle(.secondary)
             }
 
             ScrollView {
                 VStack(spacing: 0) {
                     ForEach(Array(items.enumerated()), id: \.element.command) { index, item in
-                        row(for: item, index: index)
+                        row(for: item)
                         if index < items.count - 1 {
                             Divider()
                                 .padding(.leading, 34)
                         }
                     }
                 }
+            }
+            .onDrop(of: [.plainText], isTargeted: nil) { _, _ in
+                draggedCommand = nil
+                return false
             }
             .notesBridgeGlassCard(cornerRadius: NotesBridgeGlassStyle.compactCardCornerRadius)
 
@@ -45,7 +49,7 @@ struct InlineToolbarCustomizationSheet: View {
         }
         .padding(16)
         .background(.regularMaterial)
-        .frame(width: 430, height: 390)
+        .frame(width: 440, height: 360)
     }
 
     private func visibilityBinding(for command: FormattingCommand) -> Binding<Bool> {
@@ -61,7 +65,7 @@ struct InlineToolbarCustomizationSheet: View {
     }
 
     @ViewBuilder
-    private func row(for item: InlineToolbarItemSetting, index: Int) -> some View {
+    private func row(for item: SlashCommandItemSetting) -> some View {
         HStack(spacing: 10) {
             Image(systemName: "line.3.horizontal")
                 .foregroundStyle(.tertiary)
@@ -72,7 +76,13 @@ struct InlineToolbarCustomizationSheet: View {
                 }
 
             Toggle(isOn: visibilityBinding(for: item.command)) {
-                Label(localization.text(item.command.titleKey), systemImage: item.command.systemImage)
+                HStack(spacing: 8) {
+                    Label(localization.text(item.command.titleKey), systemImage: item.command.systemImage)
+                    Spacer(minLength: 8)
+                    Text(SlashCommandCatalog.token(for: item.command))
+                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
             }
             .toggleStyle(.checkbox)
 
@@ -83,7 +93,7 @@ struct InlineToolbarCustomizationSheet: View {
         .opacity(draggedCommand == item.command ? 0.55 : 1)
         .onDrop(
             of: [.plainText],
-            delegate: InlineToolbarItemDropDelegate(
+            delegate: SlashCommandItemDropDelegate(
                 targetCommand: item.command,
                 items: $items,
                 draggedCommand: $draggedCommand
@@ -92,9 +102,9 @@ struct InlineToolbarCustomizationSheet: View {
     }
 }
 
-private struct InlineToolbarItemDropDelegate: DropDelegate {
+private struct SlashCommandItemDropDelegate: DropDelegate {
     let targetCommand: FormattingCommand
-    @Binding var items: [InlineToolbarItemSetting]
+    @Binding var items: [SlashCommandItemSetting]
     @Binding var draggedCommand: FormattingCommand?
 
     func dropUpdated(info: DropInfo) -> DropProposal? {

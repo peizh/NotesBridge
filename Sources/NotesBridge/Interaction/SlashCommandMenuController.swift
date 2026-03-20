@@ -41,9 +41,9 @@ final class SlashCommandMenuController {
             lastLocalization = localization
         }
 
-        let fittedSize = hostingController?.view.fittingSize ?? CGSize(width: 320, height: 120)
+        let fittedSize = hostingController?.view.fittingSize ?? CGSize(width: 260, height: 88)
         let size = CGSize(
-            width: max(320, fittedSize.width),
+            width: max(260, fittedSize.width),
             height: max(44, fittedSize.height)
         )
         let anchorRect = anchorRect.map(convertAccessibilityRectToAppKit) ?? CGRect(origin: NSEvent.mouseLocation, size: .zero)
@@ -87,7 +87,7 @@ final class SlashCommandMenuController {
 
         let hostingController = NSHostingController(rootView: rootView(entries: [], localization: lastLocalization, selectedIndex: 0))
         let panel = SlashCommandPanel(
-            contentRect: CGRect(x: 0, y: 0, width: 320, height: 120),
+            contentRect: CGRect(x: 0, y: 0, width: 260, height: 88),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false,

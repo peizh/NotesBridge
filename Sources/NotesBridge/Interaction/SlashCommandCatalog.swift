@@ -4,30 +4,49 @@ struct SlashCommandEntry: Identifiable, Equatable, Sendable {
     let command: FormattingCommand
     let primaryAlias: String
     let aliases: [String]
-    let titleKey: String
 
     var id: FormattingCommand { command }
     var token: String { "/\(primaryAlias)" }
 
     func localizedTitle(using localization: AppLocalization) -> String {
-        localization.text(titleKey)
+        localization.text(command.titleKey)
     }
 }
 
 struct SlashCommandCatalog: Sendable {
-    let entries: [SlashCommandEntry] = [
-        SlashCommandEntry(command: .title, primaryAlias: "title", aliases: ["title", "h1"], titleKey: "Title"),
-        SlashCommandEntry(command: .heading, primaryAlias: "heading", aliases: ["heading", "h2"], titleKey: "Heading"),
-        SlashCommandEntry(command: .subheading, primaryAlias: "subheading", aliases: ["subheading", "h3"], titleKey: "Subheading"),
-        SlashCommandEntry(command: .body, primaryAlias: "body", aliases: ["body"], titleKey: "Body"),
-        SlashCommandEntry(command: .monostyled, primaryAlias: "monostyled", aliases: ["monostyled", "code"], titleKey: "Monostyled"),
-        SlashCommandEntry(command: .checklist, primaryAlias: "checklist", aliases: ["checklist"], titleKey: "Checklist"),
-        SlashCommandEntry(command: .bulletedList, primaryAlias: "bulletedlist", aliases: ["bulletedlist"], titleKey: "Bulleted List"),
-        SlashCommandEntry(command: .dashedList, primaryAlias: "dashedlist", aliases: ["dashedlist"], titleKey: "Dashed List"),
-        SlashCommandEntry(command: .numberedList, primaryAlias: "numberedlist", aliases: ["numberedlist"], titleKey: "Numbered List"),
-        SlashCommandEntry(command: .quote, primaryAlias: "quote", aliases: ["quote", "blockquote"], titleKey: "Block Quote"),
-        SlashCommandEntry(command: .table, primaryAlias: "table", aliases: ["table"], titleKey: "Table"),
+    static let defaultEntries: [SlashCommandEntry] = [
+        SlashCommandEntry(command: .title, primaryAlias: "title", aliases: ["title", "h1"]),
+        SlashCommandEntry(command: .heading, primaryAlias: "heading", aliases: ["heading", "h2"]),
+        SlashCommandEntry(command: .subheading, primaryAlias: "subheading", aliases: ["subheading", "h3"]),
+        SlashCommandEntry(command: .body, primaryAlias: "body", aliases: ["body"]),
+        SlashCommandEntry(command: .bold, primaryAlias: "bold", aliases: ["bold"]),
+        SlashCommandEntry(command: .strikethrough, primaryAlias: "strikethrough", aliases: ["strikethrough", "strike"]),
+        SlashCommandEntry(command: .insertLink, primaryAlias: "link", aliases: ["link"]),
+        SlashCommandEntry(command: .monostyled, primaryAlias: "monostyled", aliases: ["monostyled", "code"]),
+        SlashCommandEntry(command: .checklist, primaryAlias: "checklist", aliases: ["checklist"]),
+        SlashCommandEntry(command: .bulletedList, primaryAlias: "bulletedlist", aliases: ["bulletedlist"]),
+        SlashCommandEntry(command: .dashedList, primaryAlias: "dashedlist", aliases: ["dashedlist"]),
+        SlashCommandEntry(command: .numberedList, primaryAlias: "numberedlist", aliases: ["numberedlist"]),
+        SlashCommandEntry(command: .quote, primaryAlias: "quote", aliases: ["quote", "blockquote"]),
+        SlashCommandEntry(command: .table, primaryAlias: "table", aliases: ["table"]),
     ]
+    let entries: [SlashCommandEntry]
+
+    init(entries: [SlashCommandEntry] = SlashCommandCatalog.defaultEntries) {
+        self.entries = entries
+    }
+
+    init(itemSettings: [SlashCommandItemSetting]) {
+        let entryByCommand = Dictionary(uniqueKeysWithValues: Self.defaultEntries.map { ($0.command, $0) })
+        self.entries = SlashCommandItemSetting.normalized(itemSettings).compactMap { item in
+            guard item.isVisible else { return nil }
+            return entryByCommand[item.command]
+        }
+    }
+
+    static func token(for command: FormattingCommand) -> String {
+        defaultEntries.first(where: { $0.command == command })?.token ?? ""
+    }
 
     func suggestions(for query: String) -> [SlashCommandEntry] {
         let normalizedQuery = normalize(query)
