@@ -15,7 +15,7 @@ struct SlashCommandEntry: Identifiable, Equatable, Sendable {
 }
 
 struct SlashCommandCatalog: Sendable {
-    let entries: [SlashCommandEntry] = [
+    static let defaultEntries: [SlashCommandEntry] = [
         SlashCommandEntry(command: .title, primaryAlias: "title", aliases: ["title", "h1"], titleKey: "Title"),
         SlashCommandEntry(command: .heading, primaryAlias: "heading", aliases: ["heading", "h2"], titleKey: "Heading"),
         SlashCommandEntry(command: .subheading, primaryAlias: "subheading", aliases: ["subheading", "h3"], titleKey: "Subheading"),
@@ -28,6 +28,23 @@ struct SlashCommandCatalog: Sendable {
         SlashCommandEntry(command: .quote, primaryAlias: "quote", aliases: ["quote", "blockquote"], titleKey: "Block Quote"),
         SlashCommandEntry(command: .table, primaryAlias: "table", aliases: ["table"], titleKey: "Table"),
     ]
+    let entries: [SlashCommandEntry]
+
+    init(entries: [SlashCommandEntry] = SlashCommandCatalog.defaultEntries) {
+        self.entries = entries
+    }
+
+    init(itemSettings: [SlashCommandItemSetting]) {
+        let entryByCommand = Dictionary(uniqueKeysWithValues: Self.defaultEntries.map { ($0.command, $0) })
+        self.entries = SlashCommandItemSetting.normalized(itemSettings).compactMap { item in
+            guard item.isVisible else { return nil }
+            return entryByCommand[item.command]
+        }
+    }
+
+    static func token(for command: FormattingCommand) -> String {
+        defaultEntries.first(where: { $0.command == command })?.token ?? ""
+    }
 
     func suggestions(for query: String) -> [SlashCommandEntry] {
         let normalizedQuery = normalize(query)

@@ -119,4 +119,31 @@ struct SlashCommandParserTests {
 
         #expect(match == nil)
     }
+
+    @Test
+    func hiddenCommandsAreExcludedFromMenuAndExactMatch() {
+        let customParser = SlashCommandParser(
+            catalog: SlashCommandCatalog(
+                itemSettings: [
+                    SlashCommandItemSetting(command: .title, isVisible: false),
+                    SlashCommandItemSetting(command: .heading, isVisible: true),
+                    SlashCommandItemSetting(command: .subheading, isVisible: true),
+                    SlashCommandItemSetting(command: .body, isVisible: true),
+                    SlashCommandItemSetting(command: .monostyled, isVisible: true),
+                    SlashCommandItemSetting(command: .checklist, isVisible: true),
+                    SlashCommandItemSetting(command: .bulletedList, isVisible: true),
+                    SlashCommandItemSetting(command: .dashedList, isVisible: true),
+                    SlashCommandItemSetting(command: .numberedList, isVisible: true),
+                    SlashCommandItemSetting(command: .quote, isVisible: true),
+                    SlashCommandItemSetting(command: .table, isVisible: true),
+                ]
+            )
+        )
+
+        let menuMatch = customParser.menuMatch(in: "/h", caretLocation: 2)
+        let commitMatch = customParser.commitMatchBeforeSpace(in: "/title ", caretLocation: 7)
+
+        #expect(menuMatch?.entries.map(\.command) == [.heading, .subheading])
+        #expect(commitMatch == nil)
+    }
 }
