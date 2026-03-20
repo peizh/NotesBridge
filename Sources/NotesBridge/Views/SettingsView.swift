@@ -140,11 +140,6 @@ struct SettingsView: View {
                     Text(appModel.t("Use / to open slash suggestions, or type an exact slash command and press Space to apply it inline."))
                         .foregroundStyle(.secondary)
 
-                    if appModel.settings.enableSlashCommands && !appModel.slashKeyboardNavigationAvailable {
-                        Text(appModel.t("Keyboard slash navigation is unavailable in the current build. Use the mouse, or type an exact slash command and press Space."))
-                            .foregroundStyle(.secondary)
-                    }
-
                     Text(appModel.t("Inline enhancements support the formatting bar, markdown/list triggers, and slash commands."))
                         .foregroundStyle(.secondary)
                 }
