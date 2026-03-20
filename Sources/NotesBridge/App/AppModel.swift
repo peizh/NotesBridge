@@ -185,6 +185,9 @@ final class AppModel: ObservableObject {
         self.slashCommandEngine.localizationProvider = { [weak self] in
             self?.localization ?? AppLocalization(language: .system)
         }
+        self.slashCommandEngine.catalogProvider = { [weak self] in
+            self?.visibleSlashCommandCatalog ?? SlashCommandCatalog()
+        }
 
         bindInteractionState()
         self.statusObserver?(statusMessage)
@@ -253,6 +256,10 @@ final class AppModel: ObservableObject {
             .map(\.command)
     }
 
+    var visibleSlashCommandCatalog: SlashCommandCatalog {
+        SlashCommandCatalog(itemSettings: settings.slashCommandItems)
+    }
+
     var menuBarSymbolName: String {
         if isSyncing {
             return "arrow.triangle.2.circlepath"
@@ -275,6 +282,9 @@ final class AppModel: ObservableObject {
         }
         if !settings.enableSlashCommands {
             return t("Slash commands are turned off in Settings.")
+        }
+        if visibleSlashCommandCatalog.entries.isEmpty {
+            return t("No slash commands are enabled in Settings.")
         }
         if !interactionAvailability.accessibilityGranted {
             if isRunningBundledApp {
@@ -334,6 +344,10 @@ final class AppModel: ObservableObject {
 
     func resetInlineToolbarItems() {
         settings.inlineToolbarItems = InlineToolbarItemSetting.default
+    }
+
+    func resetSlashCommandItems() {
+        settings.slashCommandItems = SlashCommandItemSetting.default
     }
 
     func requestAccessibilityPermission() {

@@ -19,14 +19,19 @@ struct SlashCommandCommitMatch: Equatable, Sendable {
 }
 
 struct SlashCommandParser: Sendable {
+    let catalog: SlashCommandCatalog
     private let whitespaceAndNewlines = CharacterSet.whitespacesAndNewlines
+
+    init(catalog: SlashCommandCatalog = SlashCommandCatalog()) {
+        self.catalog = catalog
+    }
 
     func menuMatch(in value: String, caretLocation: Int) -> SlashCommandMenuMatch? {
         guard let token = activeToken(in: value, caretLocation: caretLocation) else {
             return nil
         }
 
-        let entries = SlashCommandCatalog().suggestions(for: token.typedQuery)
+        let entries = catalog.suggestions(for: token.typedQuery)
         guard !entries.isEmpty else {
             return nil
         }
@@ -49,7 +54,7 @@ struct SlashCommandParser: Sendable {
         }
 
         let tokenText = string.substring(with: tokenRange)
-        guard let entry = SlashCommandCatalog().exactMatch(for: String(tokenText.dropFirst())) else {
+        guard let entry = catalog.exactMatch(for: String(tokenText.dropFirst())) else {
             return nil
         }
 

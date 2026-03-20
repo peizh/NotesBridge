@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject private var appModel: AppModel
     @State private var showingInlineToolbarCustomization = false
+    @State private var showingSlashCommandCustomization = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -108,13 +109,20 @@ struct SettingsView: View {
                     .disabled(!appModel.buildFlavor.supportsInlineEnhancements || !appModel.settings.enableInlineEnhancements)
 
                     LabeledContent(appModel.t("Slash Commands")) {
-                        Toggle(
-                            appModel.t("Enable slash commands"),
-                            isOn: Binding(
-                                get: { appModel.settings.enableSlashCommands },
-                                set: { appModel.settings.enableSlashCommands = $0 }
+                        HStack(spacing: 12) {
+                            Toggle(
+                                appModel.t("Enable slash commands"),
+                                isOn: Binding(
+                                    get: { appModel.settings.enableSlashCommands },
+                                    set: { appModel.settings.enableSlashCommands = $0 }
+                                )
                             )
-                        )
+
+                            Button(appModel.t("Customize...")) {
+                                showingSlashCommandCustomization = true
+                            }
+                            .disabled(!appModel.settings.enableSlashCommands)
+                        }
                     }
                     .disabled(!appModel.buildFlavor.supportsInlineEnhancements || !appModel.settings.enableInlineEnhancements)
 
@@ -301,6 +309,21 @@ struct SettingsView: View {
                 },
                 onDone: {
                     showingInlineToolbarCustomization = false
+                }
+            )
+        }
+        .sheet(isPresented: $showingSlashCommandCustomization) {
+            SlashCommandCustomizationSheet(
+                items: Binding(
+                    get: { appModel.settings.slashCommandItems },
+                    set: { appModel.settings.slashCommandItems = SlashCommandItemSetting.normalized($0) }
+                ),
+                localization: appModel.localization,
+                onReset: {
+                    appModel.resetSlashCommandItems()
+                },
+                onDone: {
+                    showingSlashCommandCustomization = false
                 }
             )
         }

@@ -28,6 +28,7 @@ struct AppSettings: Codable, Equatable, Sendable {
     var inlineToolbarItems: [InlineToolbarItemSetting]
     var enableMarkdownTriggers: Bool
     var enableSlashCommands: Bool
+    var slashCommandItems: [SlashCommandItemSetting]
 
     static let `default` = AppSettings(
         appLanguage: .system,
@@ -43,7 +44,8 @@ struct AppSettings: Codable, Equatable, Sendable {
         enableFormattingBar: true,
         inlineToolbarItems: InlineToolbarItemSetting.default,
         enableMarkdownTriggers: true,
-        enableSlashCommands: true
+        enableSlashCommands: true,
+        slashCommandItems: SlashCommandItemSetting.default
     )
 
     var hasValidVaultPath: Bool {
@@ -66,6 +68,7 @@ struct AppSettings: Codable, Equatable, Sendable {
         case inlineToolbarItems
         case enableMarkdownTriggers
         case enableSlashCommands
+        case slashCommandItems
     }
 
     init(
@@ -82,7 +85,8 @@ struct AppSettings: Codable, Equatable, Sendable {
         enableFormattingBar: Bool,
         inlineToolbarItems: [InlineToolbarItemSetting],
         enableMarkdownTriggers: Bool,
-        enableSlashCommands: Bool
+        enableSlashCommands: Bool,
+        slashCommandItems: [SlashCommandItemSetting]
     ) {
         self.appLanguage = appLanguage
         self.vaultPath = vaultPath
@@ -98,6 +102,7 @@ struct AppSettings: Codable, Equatable, Sendable {
         self.inlineToolbarItems = InlineToolbarItemSetting.normalized(inlineToolbarItems)
         self.enableMarkdownTriggers = enableMarkdownTriggers
         self.enableSlashCommands = enableSlashCommands
+        self.slashCommandItems = SlashCommandItemSetting.normalized(slashCommandItems)
     }
 
     init(from decoder: any Decoder) throws {
@@ -119,6 +124,10 @@ struct AppSettings: Codable, Equatable, Sendable {
         )
         self.enableMarkdownTriggers = try container.decodeIfPresent(Bool.self, forKey: .enableMarkdownTriggers) ?? Self.default.enableMarkdownTriggers
         self.enableSlashCommands = try container.decodeIfPresent(Bool.self, forKey: .enableSlashCommands) ?? Self.default.enableSlashCommands
+        self.slashCommandItems = SlashCommandItemSetting.normalized(
+            try container.decodeIfPresent([SlashCommandItemSetting].self, forKey: .slashCommandItems)
+                ?? Self.default.slashCommandItems
+        )
     }
 
     func encode(to encoder: any Encoder) throws {
@@ -137,5 +146,6 @@ struct AppSettings: Codable, Equatable, Sendable {
         try container.encode(InlineToolbarItemSetting.normalized(inlineToolbarItems), forKey: .inlineToolbarItems)
         try container.encode(enableMarkdownTriggers, forKey: .enableMarkdownTriggers)
         try container.encode(enableSlashCommands, forKey: .enableSlashCommands)
+        try container.encode(SlashCommandItemSetting.normalized(slashCommandItems), forKey: .slashCommandItems)
     }
 }
