@@ -21,7 +21,8 @@ struct AppSettings: Codable, Equatable, Sendable {
     var exportFolderName: String
     var attachmentFolderName: String
     var useObsidianAttachmentFolder: Bool
-    var autoSyncOnPush: Bool
+    var automaticSyncEnabled: Bool
+    var automaticSyncInterval: AutomaticSyncInterval
     var syncDirection: SyncDirection
     var enableInlineEnhancements: Bool
     var enableFormattingBar: Bool
@@ -38,7 +39,8 @@ struct AppSettings: Codable, Equatable, Sendable {
         exportFolderName: "Apple Notes",
         attachmentFolderName: "_attachments",
         useObsidianAttachmentFolder: false,
-        autoSyncOnPush: true,
+        automaticSyncEnabled: false,
+        automaticSyncInterval: .fifteenMinutes,
         syncDirection: .appleNotesToObsidian,
         enableInlineEnhancements: true,
         enableFormattingBar: true,
@@ -61,6 +63,8 @@ struct AppSettings: Codable, Equatable, Sendable {
         case exportFolderName
         case attachmentFolderName
         case useObsidianAttachmentFolder
+        case automaticSyncEnabled
+        case automaticSyncInterval
         case autoSyncOnPush
         case syncDirection
         case enableInlineEnhancements
@@ -79,7 +83,8 @@ struct AppSettings: Codable, Equatable, Sendable {
         exportFolderName: String,
         attachmentFolderName: String,
         useObsidianAttachmentFolder: Bool,
-        autoSyncOnPush: Bool,
+        automaticSyncEnabled: Bool,
+        automaticSyncInterval: AutomaticSyncInterval,
         syncDirection: SyncDirection,
         enableInlineEnhancements: Bool,
         enableFormattingBar: Bool,
@@ -95,7 +100,8 @@ struct AppSettings: Codable, Equatable, Sendable {
         self.exportFolderName = exportFolderName
         self.attachmentFolderName = attachmentFolderName
         self.useObsidianAttachmentFolder = useObsidianAttachmentFolder
-        self.autoSyncOnPush = autoSyncOnPush
+        self.automaticSyncEnabled = automaticSyncEnabled
+        self.automaticSyncInterval = automaticSyncInterval
         self.syncDirection = syncDirection
         self.enableInlineEnhancements = enableInlineEnhancements
         self.enableFormattingBar = enableFormattingBar
@@ -114,7 +120,8 @@ struct AppSettings: Codable, Equatable, Sendable {
         self.exportFolderName = try container.decodeIfPresent(String.self, forKey: .exportFolderName) ?? Self.default.exportFolderName
         self.attachmentFolderName = try container.decodeIfPresent(String.self, forKey: .attachmentFolderName) ?? Self.default.attachmentFolderName
         self.useObsidianAttachmentFolder = try container.decodeIfPresent(Bool.self, forKey: .useObsidianAttachmentFolder) ?? Self.default.useObsidianAttachmentFolder
-        self.autoSyncOnPush = try container.decodeIfPresent(Bool.self, forKey: .autoSyncOnPush) ?? Self.default.autoSyncOnPush
+        self.automaticSyncEnabled = try container.decodeIfPresent(Bool.self, forKey: .automaticSyncEnabled) ?? Self.default.automaticSyncEnabled
+        self.automaticSyncInterval = try container.decodeIfPresent(AutomaticSyncInterval.self, forKey: .automaticSyncInterval) ?? Self.default.automaticSyncInterval
         self.syncDirection = try container.decodeIfPresent(SyncDirection.self, forKey: .syncDirection) ?? Self.default.syncDirection
         self.enableInlineEnhancements = try container.decodeIfPresent(Bool.self, forKey: .enableInlineEnhancements) ?? Self.default.enableInlineEnhancements
         self.enableFormattingBar = try container.decodeIfPresent(Bool.self, forKey: .enableFormattingBar) ?? Self.default.enableFormattingBar
@@ -139,7 +146,8 @@ struct AppSettings: Codable, Equatable, Sendable {
         try container.encode(exportFolderName, forKey: .exportFolderName)
         try container.encode(attachmentFolderName, forKey: .attachmentFolderName)
         try container.encode(useObsidianAttachmentFolder, forKey: .useObsidianAttachmentFolder)
-        try container.encode(autoSyncOnPush, forKey: .autoSyncOnPush)
+        try container.encode(automaticSyncEnabled, forKey: .automaticSyncEnabled)
+        try container.encode(automaticSyncInterval, forKey: .automaticSyncInterval)
         try container.encode(syncDirection, forKey: .syncDirection)
         try container.encode(enableInlineEnhancements, forKey: .enableInlineEnhancements)
         try container.encode(enableFormattingBar, forKey: .enableFormattingBar)

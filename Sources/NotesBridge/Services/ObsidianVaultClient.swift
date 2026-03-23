@@ -30,6 +30,57 @@ enum ObsidianVaultError: LocalizedError {
 }
 
 struct ObsidianVaultClient: Sendable {
+    func moveExportedNoteToRemoved(
+        relativePath: String,
+        settings: AppSettings
+    ) throws -> String? {
+        let fileManager = FileManager.default
+        let vaultURL = try vaultURL(for: settings)
+        let sourceURL = vaultURL.appendingPathComponent(relativePath)
+        let sourceAttachmentDirectoryURL = attachmentDirectoryURL(
+            forNoteRelativePath: relativePath,
+            settings: settings,
+            vaultURL: vaultURL
+        )
+
+        guard fileManager.fileExists(atPath: sourceURL.path)
+            || fileManager.fileExists(atPath: sourceAttachmentDirectoryURL.path)
+        else {
+            return nil
+        }
+
+        var occupiedRelativePaths = Set(try indexExistingNotes(settings: settings).values)
+        occupiedRelativePaths.remove(relativePath)
+        let removedRelativePath = removedRelativePath(
+            for: relativePath,
+            settings: settings,
+            occupiedRelativePaths: occupiedRelativePaths
+        )
+        let destinationURL = vaultURL.appendingPathComponent(removedRelativePath)
+        if fileManager.fileExists(atPath: sourceURL.path) {
+            try fileManager.createDirectory(at: destinationURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            if fileManager.fileExists(atPath: destinationURL.path) {
+                try fileManager.removeItem(at: destinationURL)
+            }
+            try fileManager.moveItem(at: sourceURL, to: destinationURL)
+        }
+
+        let destinationAttachmentDirectoryURL = attachmentDirectoryURL(
+            forNoteRelativePath: removedRelativePath,
+            settings: settings,
+            vaultURL: vaultURL
+        )
+        if fileManager.fileExists(atPath: sourceAttachmentDirectoryURL.path) {
+            try fileManager.createDirectory(at: destinationAttachmentDirectoryURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            if fileManager.fileExists(atPath: destinationAttachmentDirectoryURL.path) {
+                try fileManager.removeItem(at: destinationAttachmentDirectoryURL)
+            }
+            try fileManager.moveItem(at: sourceAttachmentDirectoryURL, to: destinationAttachmentDirectoryURL)
+        }
+
+        return removedRelativePath
+    }
+
     func export(
         note: AppleNotesSyncDocument,
         settings: AppSettings,
@@ -119,6 +170,22 @@ struct ObsidianVaultClient: Sendable {
         occupiedRelativePaths: Set<String>
     ) -> String {
         resolveRelativePath(for: note, settings: settings, existingRelativePath: existingRelativePath) { candidateRelativePath in
+            occupiedRelativePaths.contains(candidateRelativePath)
+        }
+    }
+
+    func plannedRelativePath(
+        for note: AppleNotesSyncManifestEntry,
+        settings: AppSettings,
+        existingRelativePath: String?,
+        occupiedRelativePaths: Set<String>
+    ) -> String {
+        resolveRelativePath(
+            displayName: note.displayName,
+            exportFolderPath: note.exportFolderPath,
+            settings: settings,
+            existingRelativePath: existingRelativePath
+        ) { candidateRelativePath in
             occupiedRelativePaths.contains(candidateRelativePath)
         }
     }
@@ -552,9 +619,25 @@ struct ObsidianVaultClient: Sendable {
         existingRelativePath: String?,
         isOccupied: (String) -> Bool
     ) -> String {
+        resolveRelativePath(
+            displayName: note.displayName,
+            exportFolderPath: note.exportFolderPath,
+            settings: settings,
+            existingRelativePath: existingRelativePath,
+            isOccupied: isOccupied
+        )
+    }
+
+    private func resolveRelativePath(
+        displayName: String,
+        exportFolderPath: String,
+        settings: AppSettings,
+        existingRelativePath: String?,
+        isOccupied: (String) -> Bool
+    ) -> String {
         let exportRootName = sanitizePathComponent(settings.exportFolderName)
-        let folderPath = sanitizeRelativePath(note.exportFolderPath)
-        let baseFileName = sanitizePathComponent(note.displayName)
+        let folderPath = sanitizeRelativePath(exportFolderPath)
+        let baseFileName = sanitizePathComponent(displayName)
         let directoryPath = folderPath.isEmpty
             ? exportRootName
             : exportRootName + "/" + folderPath
@@ -572,6 +655,33 @@ struct ObsidianVaultClient: Sendable {
                 return candidateRelativePath
             }
 
+            collisionIndex += 1
+        }
+    }
+
+    private func removedRelativePath(
+        for relativePath: String,
+        settings: AppSettings,
+        occupiedRelativePaths: Set<String>
+    ) -> String {
+        let exportRootName = sanitizePathComponent(settings.exportFolderName)
+        let removedRoot = exportRootName + "/_Removed"
+        let relativePathInsideExportRoot = relativePath.hasPrefix(exportRootName + "/")
+            ? String(relativePath.dropFirst(exportRootName.count + 1))
+            : relativePath
+        let directory = parentRelativePath(of: relativePathInsideExportRoot)
+        let noteStem = noteStem(fromRelativePath: relativePathInsideExportRoot)
+        let baseDirectory = directory.isEmpty ? removedRoot : removedRoot + "/" + directory
+
+        var collisionIndex = 1
+        while true {
+            let fileName = collisionIndex == 1
+                ? "\(sanitizePathComponent(noteStem)).md"
+                : "\(sanitizePathComponent(noteStem)) \(collisionIndex).md"
+            let candidateRelativePath = baseDirectory + "/" + fileName
+            if !occupiedRelativePaths.contains(candidateRelativePath) {
+                return candidateRelativePath
+            }
             collisionIndex += 1
         }
     }

@@ -5,6 +5,8 @@ struct SyncRecord: Codable, Identifiable, Equatable, Sendable {
     var relativePath: String
     var lastSyncedAt: Date
     var sourceUpdatedAt: Date?
+    var sourceName: String?
+    var sourceFolderPath: String?
 
     var id: String { noteID }
 
@@ -12,17 +14,31 @@ struct SyncRecord: Codable, Identifiable, Equatable, Sendable {
         noteID: String,
         relativePath: String,
         lastSyncedAt: Date = Date(),
-        sourceUpdatedAt: Date?
+        sourceUpdatedAt: Date?,
+        sourceName: String? = nil,
+        sourceFolderPath: String? = nil
     ) {
         self.noteID = noteID
         self.relativePath = relativePath
         self.lastSyncedAt = lastSyncedAt
         self.sourceUpdatedAt = sourceUpdatedAt
+        self.sourceName = sourceName
+        self.sourceFolderPath = sourceFolderPath
     }
+}
+
+enum SyncRunMode: String, Codable, Sendable {
+    case incremental
+    case automatic
+    case full
 }
 
 struct SyncIndex: Codable, Sendable {
     var records: [String: SyncRecord] = [:]
+    var lastSyncAt: Date?
+    var lastSyncMode: SyncRunMode?
+    var lastIncrementalSyncAt: Date?
+    var lastAutomaticSyncAt: Date?
     var lastFullSyncAt: Date?
     var lastFullSyncNoteCount: Int?
     var lastFullSyncFolderCount: Int?

@@ -41,7 +41,9 @@ struct SyncEngine: Syncing {
                 noteID: document.id,
                 relativePath: export.relativePath,
                 lastSyncedAt: Date(),
-                sourceUpdatedAt: document.updatedAt
+                sourceUpdatedAt: document.updatedAt,
+                sourceName: document.displayName,
+                sourceFolderPath: document.exportFolderPath
             ),
             unresolvedInternalLinkCount: export.unresolvedInternalLinkCount
         )

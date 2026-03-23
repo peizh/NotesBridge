@@ -82,6 +82,7 @@ final class AppModel: ObservableObject {
             persistSettings()
             notesContextMonitor.updateSettings(settings)
             refreshAppleNotesDataAccessStatus()
+            scheduleAutomaticSyncIfNeeded()
             formattingBarController.update(
                 selectionContext: selectionContext,
                 availability: interactionAvailability,
@@ -113,6 +114,7 @@ final class AppModel: ObservableObject {
     private let notesClient: any AppleNotesClient
     private let appleNotesSyncDataSource: any AppleNotesSyncDataSourcing
     private let appleNotesDataFolderSelector: any AppleNotesDataFolderSelecting
+    private let incrementalSyncPlanner: IncrementalSyncPlanner
     private let syncEngine: any Syncing
     private let vaultClient: ObsidianVaultClient
     private let bundledAppLauncher: BundledAppLauncher
@@ -127,12 +129,14 @@ final class AppModel: ObservableObject {
     private let statusObserver: (@MainActor @Sendable (String) -> Void)?
     private var syncIndex: SyncIndex
     private var syncAnimationCancellable: AnyCancellable?
+    private var automaticSyncCancellable: AnyCancellable?
     private var cancellables: Set<AnyCancellable> = []
 
     init(
         notesClient: any AppleNotesClient = AppleNotesScriptClient(),
         appleNotesSyncDataSource: any AppleNotesSyncDataSourcing = AppleNotesDatabaseSyncSource(),
         appleNotesDataFolderSelector: any AppleNotesDataFolderSelecting = AppleNotesDataFolderSelector(),
+        incrementalSyncPlanner: IncrementalSyncPlanner = IncrementalSyncPlanner(),
         syncEngine: any Syncing = SyncEngine(),
         vaultClient: ObsidianVaultClient = ObsidianVaultClient(),
         bundledAppLauncher: BundledAppLauncher = BundledAppLauncher(),
@@ -147,6 +151,7 @@ final class AppModel: ObservableObject {
         self.notesClient = notesClient
         self.appleNotesSyncDataSource = appleNotesSyncDataSource
         self.appleNotesDataFolderSelector = appleNotesDataFolderSelector
+        self.incrementalSyncPlanner = incrementalSyncPlanner
         self.syncEngine = syncEngine
         self.vaultClient = vaultClient
         self.bundledAppLauncher = bundledAppLauncher
@@ -273,6 +278,19 @@ final class AppModel: ObservableObject {
     var lastFullSyncLabel: String {
         guard let lastFullSyncAt = syncIndex.lastFullSyncAt else { return t("Never") }
         return lastFullSyncAt.formatted(date: .abbreviated, time: .shortened)
+    }
+
+    var lastSyncLabel: String {
+        guard let lastSyncAt = syncIndex.lastSyncAt else { return t("Never") }
+        return lastSyncAt.formatted(date: .abbreviated, time: .shortened)
+    }
+
+    var automaticSyncEnabled: Bool {
+        settings.automaticSyncEnabled
+    }
+
+    var automaticSyncInterval: AutomaticSyncInterval {
+        settings.automaticSyncInterval
     }
 
     var indexedFolderCount: Int {
@@ -596,7 +614,228 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func syncChangedNotes() async {
+        await runIncrementalSync(trigger: .incremental)
+    }
+
+    private func runIncrementalSync(trigger: SyncRunMode) async {
+        guard hasVaultConfigured else {
+            presentMessage(t("Choose an Obsidian vault before syncing."))
+            return
+        }
+        guard !isSyncing else {
+            return
+        }
+        guard let dataFolderAccess = ensureAppleNotesDataFolderSelectionForSync() else {
+            return
+        }
+
+        let dataFolderSelection = dataFolderAccess.selection
+        let appleNotesSyncDataSource = self.appleNotesSyncDataSource
+        let incrementalSyncPlanner = self.incrementalSyncPlanner
+        let syncEngine = self.syncEngine
+        let vaultClient = self.vaultClient
+        let settings = self.settings
+        let dataFolderBookmark = self.settings.appleNotesDataBookmark
+        let syncIndexSnapshot = self.syncIndex
+        let progressReporter = makeSyncProgressReporter()
+
+        isSyncing = true
+        startSyncAnimation()
+        syncProgress = nil
+        errorMessage = nil
+        if trigger == .automatic {
+            statusMessage = t("Checking Apple Notes for changes...")
+        } else {
+            statusMessage = t("Syncing changed Apple Notes to Obsidian...")
+        }
+
+        defer {
+            isSyncing = false
+            stopSyncAnimation()
+            syncProgress = nil
+            dataFolderAccess.accessSession?.stopAccessing()
+        }
+
+        do {
+            let result = try await Task.detached(priority: .utility) {
+                let totalStart = Date()
+                var timings = IncrementalSyncTimings()
+                let loadManifestStart = Date()
+                let manifest = try {
+                    if let accessSession = makeAppleNotesDataFolderAccessSession(
+                        path: dataFolderSelection.rootURL.path,
+                        bookmarkData: dataFolderBookmark
+                    ) {
+                        defer { accessSession.stopAccessing() }
+                        return try appleNotesSyncDataSource.loadManifest(fromDataFolder: accessSession.url.path)
+                    }
+                    return try appleNotesSyncDataSource.loadManifest(fromDataFolder: dataFolderSelection.rootURL.path)
+                }()
+                timings.loadManifest = Date().timeIntervalSince(loadManifestStart)
+
+                let scanExistingStart = Date()
+                let indexedRelativePaths = try vaultClient.indexExistingNotes(settings: settings)
+                timings.scanExisting = Date().timeIntervalSince(scanExistingStart)
+
+                let plan = incrementalSyncPlanner.plan(
+                    manifest: manifest,
+                    syncIndex: syncIndexSnapshot,
+                    indexedRelativePaths: indexedRelativePaths,
+                    settings: settings
+                )
+
+                let noteIDsToLoad = Set(plan.exports.map(\.manifestEntry.databaseNoteID))
+                let loadDocumentsStart = Date()
+                let changedSnapshot = try {
+                    if let accessSession = makeAppleNotesDataFolderAccessSession(
+                        path: dataFolderSelection.rootURL.path,
+                        bookmarkData: dataFolderBookmark
+                    ) {
+                        defer { accessSession.stopAccessing() }
+                        return try appleNotesSyncDataSource.loadDocuments(
+                            fromDataFolder: accessSession.url.path,
+                            noteIDs: noteIDsToLoad
+                        )
+                    }
+                    return try appleNotesSyncDataSource.loadDocuments(
+                        fromDataFolder: dataFolderSelection.rootURL.path,
+                        noteIDs: noteIDsToLoad
+                    )
+                }()
+                timings.loadChangedDocuments = Date().timeIntervalSince(loadDocumentsStart)
+                let changedDocumentsByID = Dictionary(
+                    uniqueKeysWithValues: changedSnapshot.documents.map { ($0.id, $0) }
+                )
+
+                var missingDocumentIDs: [String] = []
+                for plannedExport in plan.exports where changedDocumentsByID[plannedExport.manifestEntry.id] == nil {
+                    missingDocumentIDs.append(plannedExport.manifestEntry.id)
+                }
+                if !missingDocumentIDs.isEmpty {
+                    throw IncrementalSyncExecutionError.missingChangedDocuments(
+                        "Incremental sync could not load \(missingDocumentIDs.count) changed note(s): \(missingDocumentIDs.joined(separator: ", "))"
+                    )
+                }
+
+                var updatedRecords = syncIndexSnapshot.records
+                var unresolvedInternalLinks = 0
+                let groupedExports = Dictionary(grouping: plan.exports) { $0.manifestEntry.folderDisplayName }
+                    .sorted { $0.key.localizedCaseInsensitiveCompare($1.key) == .orderedAscending }
+                let progress = SyncProgress(
+                    completedNotes: 0,
+                    totalNotes: plan.exports.count,
+                    completedFolders: 0,
+                    totalFolders: max(groupedExports.count, 1),
+                    currentFolderName: nil,
+                    skippedNotes: 0
+                )
+                var mutableProgress = progress
+                if !plan.exports.isEmpty {
+                    await progressReporter.publish(mutableProgress)
+                }
+
+                for (folderName, exports) in groupedExports {
+                    mutableProgress.enterFolder(folderName)
+                    await progressReporter.publish(mutableProgress)
+
+                    for plannedExport in exports {
+                        guard let document = changedDocumentsByID[plannedExport.manifestEntry.id] else {
+                            continue
+                        }
+                        let exportStart = Date()
+                        let syncResult = try syncEngine.sync(
+                            document: document,
+                            settings: settings,
+                            existingRelativePath: plannedExport.existingRelativePath,
+                            plannedRelativePath: plannedExport.plannedRelativePath,
+                            plannedRelativePathsBySourceIdentifier: plan.plannedRelativePathsBySourceIdentifier
+                        )
+                        timings.export += Date().timeIntervalSince(exportStart)
+                        updatedRecords[syncResult.record.noteID] = syncResult.record
+                        unresolvedInternalLinks += syncResult.unresolvedInternalLinkCount
+                        mutableProgress.markProcessedNotes()
+                        await progressReporter.publish(mutableProgress)
+                    }
+
+                    mutableProgress.markCompletedFolder()
+                    await progressReporter.publish(mutableProgress)
+                }
+
+                let removeDeletedStart = Date()
+                var movedRemovedNotes = 0
+                for removedRecord in plan.removedRecords {
+                    if try vaultClient.moveExportedNoteToRemoved(
+                        relativePath: removedRecord.relativePath,
+                        settings: settings
+                    ) != nil {
+                        movedRemovedNotes += 1
+                    }
+                    updatedRecords.removeValue(forKey: removedRecord.noteID)
+                }
+                timings.removeDeleted = Date().timeIntervalSince(removeDeletedStart)
+                timings.total = Date().timeIntervalSince(totalStart)
+
+                return IncrementalSyncResult(
+                    folders: plan.folders,
+                    updatedRecords: updatedRecords,
+                    exportedNoteCount: plan.exports.count,
+                    removedNoteCount: movedRemovedNotes,
+                    unchangedNoteCount: plan.unchangedNoteCount,
+                    timings: timings,
+                    diagnostics: IncrementalSyncDiagnostics(
+                        skippedNotes: plan.skippedLockedNotes,
+                        unresolvedInternalLinks: unresolvedInternalLinks
+                    )
+                )
+            }.value
+
+            folderSummaries = result.folders.sorted {
+                $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+            }
+            syncIndex.records = result.updatedRecords
+            let persistStart = Date()
+            let now = Date()
+            syncIndex.lastSyncAt = now
+            syncIndex.lastSyncMode = trigger
+            syncIndex.lastIncrementalSyncAt = now
+            if trigger == .automatic {
+                syncIndex.lastAutomaticSyncAt = now
+            }
+            try persistence.saveSyncIndex(syncIndex)
+            let persistDuration = Date().timeIntervalSince(persistStart)
+            let timingSummary = result.timings.summary(persistIndex: persistDuration)
+            let diagnosticsSummary = result.diagnostics.summary
+
+            if result.exportedNoteCount == 0 && result.removedNoteCount == 0 {
+                if trigger != .automatic {
+                    statusMessage = "\(t("No Apple Notes changes were found.")) \(timingSummary)"
+                }
+                return
+            }
+
+            statusMessage = "\(tf("Synced %lld changed note(s), moved %lld note(s) to _Removed, and left %lld note(s) unchanged.", result.exportedNoteCount, result.removedNoteCount, result.unchangedNoteCount)) \(timingSummary)\(diagnosticsSummary.isEmpty ? "" : " \(diagnosticsSummary)")"
+        } catch let error as IncrementalSyncExecutionError {
+            if error.shouldFallbackToFullSync {
+                statusMessage = t("Incremental sync fell back to a full sync because the change manifest was incomplete.")
+                isSyncing = false
+                stopSyncAnimation()
+                syncProgress = nil
+                dataFolderAccess.accessSession?.stopAccessing()
+                await runFullSync()
+                return
+            }
+            present(error, fallback: t("Failed to sync changed Apple Notes to Obsidian."))
+        } catch {
+            present(error, fallback: t("Failed to sync changed Apple Notes to Obsidian."))
+        }
+    }
+
     func syncAllNotes() async {
+        await runFullSync()
+    }
+
+    func runFullSync() async {
         guard hasVaultConfigured else {
             presentMessage(t("Choose an Obsidian vault before syncing."))
             return
@@ -619,7 +858,7 @@ final class AppModel: ObservableObject {
         startSyncAnimation()
         syncProgress = nil
         errorMessage = nil
-        statusMessage = t("Syncing Apple Notes to Obsidian...")
+        statusMessage = t("Running a full Apple Notes sync...")
 
         defer {
             isSyncing = false
@@ -936,7 +1175,10 @@ final class AppModel: ObservableObject {
                 syncIndex.records[record.noteID] = record
             }
             let persistStart = Date()
-            syncIndex.lastFullSyncAt = Date()
+            let now = Date()
+            syncIndex.lastSyncAt = now
+            syncIndex.lastSyncMode = .full
+            syncIndex.lastFullSyncAt = now
             syncIndex.lastFullSyncNoteCount = result.records.count
             syncIndex.lastFullSyncFolderCount = result.exportedFolderCount
             try persistence.saveSyncIndex(syncIndex)
@@ -1003,6 +1245,7 @@ final class AppModel: ObservableObject {
             slashCommandEngine.start()
         }
 
+        scheduleAutomaticSyncIfNeeded()
         scheduleAccessibilityPromptIfNeeded()
     }
 
@@ -1055,6 +1298,39 @@ final class AppModel: ObservableObject {
             }
             self.requestAccessibilityPermission()
         }
+    }
+
+    private func scheduleAutomaticSyncIfNeeded() {
+        automaticSyncCancellable?.cancel()
+        automaticSyncCancellable = nil
+
+        guard settings.automaticSyncEnabled else {
+            return
+        }
+
+        automaticSyncCancellable = Timer.publish(
+            every: TimeInterval(settings.automaticSyncInterval.minutes * 60),
+            on: .main,
+            in: .common
+        )
+        .autoconnect()
+        .sink { [weak self] _ in
+            Task { [weak self] in
+                await self?.runAutomaticSyncIfNeeded()
+            }
+        }
+    }
+
+    private func runAutomaticSyncIfNeeded() async {
+        guard settings.automaticSyncEnabled,
+              hasVaultConfigured,
+              hasAppleNotesDataFolderConfigured,
+              !isSyncing
+        else {
+            return
+        }
+
+        await runIncrementalSync(trigger: .automatic)
     }
 
     private func present(_ error: Error, fallback: String) {
@@ -1110,6 +1386,16 @@ private struct FullSyncResult {
     var migratedLegacyIDs: Set<String>
 }
 
+private struct IncrementalSyncResult {
+    var folders: [AppleNotesFolder]
+    var updatedRecords: [String: SyncRecord]
+    var exportedNoteCount: Int
+    var removedNoteCount: Int
+    var unchangedNoteCount: Int
+    var timings: IncrementalSyncTimings
+    var diagnostics: IncrementalSyncDiagnostics
+}
+
 private enum FullSyncExecutionError: LocalizedError {
     case emptySnapshot(String)
     case noDocumentsMatchedFolders(String)
@@ -1124,6 +1410,24 @@ private enum FullSyncExecutionError: LocalizedError {
     }
 }
 
+private enum IncrementalSyncExecutionError: LocalizedError {
+    case missingChangedDocuments(String)
+
+    var errorDescription: String? {
+        switch self {
+        case let .missingChangedDocuments(details):
+            details
+        }
+    }
+
+    var shouldFallbackToFullSync: Bool {
+        switch self {
+        case .missingChangedDocuments:
+            true
+        }
+    }
+}
+
 private struct SyncTimings: Sendable {
     var loadSnapshot: TimeInterval = 0
     var scanExisting: TimeInterval = 0
@@ -1133,6 +1437,20 @@ private struct SyncTimings: Sendable {
     func summary(persistIndex: TimeInterval) -> String {
         let totalDuration = total + persistIndex
         return "Total \(totalDuration.formattedDuration); snapshot \(loadSnapshot.formattedDuration); index \(scanExisting.formattedDuration); export \(export.formattedDuration); persist \(persistIndex.formattedDuration)."
+    }
+}
+
+private struct IncrementalSyncTimings: Sendable {
+    var loadManifest: TimeInterval = 0
+    var loadChangedDocuments: TimeInterval = 0
+    var scanExisting: TimeInterval = 0
+    var removeDeleted: TimeInterval = 0
+    var export: TimeInterval = 0
+    var total: TimeInterval = 0
+
+    func summary(persistIndex: TimeInterval) -> String {
+        let totalDuration = total + persistIndex
+        return "Total \(totalDuration.formattedDuration); manifest \(loadManifest.formattedDuration); changed \(loadChangedDocuments.formattedDuration); index \(scanExisting.formattedDuration); removed \(removeDeleted.formattedDuration); export \(export.formattedDuration); persist \(persistIndex.formattedDuration)."
     }
 }
 
@@ -1173,6 +1491,25 @@ private struct SyncDiagnostics: Sendable {
 
         if partialScanPageFailures > 0 {
             parts.append("Fell back on \(partialScanPageFailures) Apple Notes scan page(s) that could not be resolved cleanly.")
+        }
+
+        return parts.joined(separator: " ")
+    }
+}
+
+private struct IncrementalSyncDiagnostics: Sendable {
+    var skippedNotes = 0
+    var unresolvedInternalLinks = 0
+
+    var summary: String {
+        var parts: [String] = []
+
+        if skippedNotes > 0 {
+            parts.append("Skipped \(skippedNotes) locked note(s).")
+        }
+
+        if unresolvedInternalLinks > 0 {
+            parts.append("Left \(unresolvedInternalLinks) internal note link(s) as plain text because their targets were not exported.")
         }
 
         return parts.joined(separator: " ")

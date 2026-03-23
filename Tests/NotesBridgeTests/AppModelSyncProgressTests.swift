@@ -196,6 +196,39 @@ private struct StubAppleNotesSyncDataSource: AppleNotesSyncDataSourcing {
         folders
     }
 
+    func loadManifest(fromDataFolder path: String) throws -> AppleNotesSyncManifest {
+        let documents = folders.flatMap { documentsByFolderName[$0.displayName] ?? [] }
+        return AppleNotesSyncManifest(
+            folders: folders,
+            entries: documents.map { document in
+                AppleNotesSyncManifestEntry(
+                    databaseNoteID: document.databaseNoteID,
+                    sourceNoteIdentifier: document.sourceNoteIdentifierRaw,
+                    folderDatabaseID: document.folderDatabaseID,
+                    name: document.name,
+                    folder: document.folder,
+                    folderPath: document.folderPath,
+                    updatedAt: document.updatedAt,
+                    passwordProtected: document.passwordProtected,
+                    trashed: false
+                )
+            },
+            skippedLockedNotes: 0,
+            skippedLockedNotesByFolder: [:],
+            sourceDiagnostics: nil
+        )
+    }
+
+    func loadDocuments(fromDataFolder path: String, noteIDs: Set<Int64>) throws -> AppleNotesSyncSnapshot {
+        let allDocuments = folders.flatMap { documentsByFolderName[$0.displayName] ?? [] }
+        return AppleNotesSyncSnapshot(
+            folders: folders,
+            documents: allDocuments.filter { noteIDs.contains($0.databaseNoteID) },
+            skippedLockedNotes: 0,
+            skippedLockedNotesByFolder: [:]
+        )
+    }
+
     func loadSnapshot(fromDataFolder path: String) throws -> AppleNotesSyncSnapshot {
         AppleNotesSyncSnapshot(
             folders: folders,
