@@ -36,6 +36,90 @@ struct AppleNotesMarkdownRendererTests {
     }
 
     @Test
+    func backfillsMissingParagraphStyleForLeadingCodeBlockCharacter() throws {
+        let noteText = "Keep these backup codes somewhere safe but accessible.\n1\n"
+        let note = AppleNotesDecodedNote(
+            noteText: noteText,
+            attributeRuns: [
+                AppleNotesDecodedAttributeRun(
+                    length: 1,
+                    paragraphStyle: nil,
+                    fontWeight: nil,
+                    underlined: false,
+                    strikethrough: false,
+                    superscript: nil,
+                    link: nil,
+                    attachmentInfo: nil
+                ),
+                AppleNotesDecodedAttributeRun(
+                    length: (noteText as NSString).length - 1,
+                    paragraphStyle: AppleNotesDecodedParagraphStyle(
+                        styleType: 4,
+                        indentAmount: 0,
+                        blockquote: false,
+                        checklist: nil
+                    ),
+                    fontWeight: nil,
+                    underlined: false,
+                    strikethrough: false,
+                    superscript: nil,
+                    link: nil,
+                    attachmentInfo: nil
+                ),
+            ]
+        )
+
+        let rendered = try renderer.render(note: note) { _ in
+            .inlineText("")
+        }
+
+        #expect(rendered.markdownTemplate == "```\n\(noteText)```")
+    }
+
+    @Test
+    func preservesMonospacedRunBoundariesWhenNoteTextContainsCRLF() throws {
+        let noteText = "\r\nKeep these backup codes somewhere safe but accessible.\r\n"
+        let note = AppleNotesDecodedNote(
+            noteText: noteText,
+            attributeRuns: [
+                AppleNotesDecodedAttributeRun(
+                    length: ("\r\n" as NSString).length,
+                    paragraphStyle: nil,
+                    fontWeight: nil,
+                    underlined: false,
+                    strikethrough: false,
+                    superscript: nil,
+                    link: nil,
+                    attachmentInfo: nil
+                ),
+                AppleNotesDecodedAttributeRun(
+                    length: ("Keep these backup codes somewhere safe but accessible.\r\n" as NSString).length,
+                    paragraphStyle: AppleNotesDecodedParagraphStyle(
+                        styleType: 4,
+                        indentAmount: 0,
+                        blockquote: false,
+                        checklist: nil
+                    ),
+                    fontWeight: nil,
+                    underlined: false,
+                    strikethrough: false,
+                    superscript: nil,
+                    link: nil,
+                    attachmentInfo: nil
+                ),
+            ]
+        )
+
+        let rendered = try renderer.render(note: note) { _ in
+            .inlineText("")
+        }
+
+        #expect(!rendered.markdownTemplate.contains("\nK\n```"))
+        #expect(rendered.markdownTemplate.contains("Keep these backup codes somewhere safe but accessible."))
+        #expect(!rendered.markdownTemplate.contains("\r"))
+    }
+
+    @Test
     func injectsAttachmentTokensAndCollectsResolvedAttachments() throws {
         let note = makeNote(
             segments: [

@@ -325,17 +325,11 @@ struct AppleNotesMarkdownRenderer {
     ) throws -> AppleNotesRenderedNote {
         var state = RenderState(options: options)
         let noteText = note.noteText
-            .replacingOccurrences(of: "\r\n", with: "\n")
-            .replacingOccurrences(of: "\r", with: "\n")
-        let string = noteText as NSString
-        var offset = 0
 
-        for run in note.attributeRuns {
-            let fragment = string.safeSubstring(location: offset, length: run.length)
-            offset += run.length
+        for renderRun in normalizedRenderRuns(noteText: noteText, attributeRuns: note.attributeRuns) {
             try state.append(
-                fragment: fragment,
-                run: run,
+                fragment: renderRun.fragment,
+                run: renderRun.run,
                 attachmentResolver: attachmentResolver
             )
         }
@@ -351,6 +345,57 @@ struct AppleNotesMarkdownRenderer {
 }
 
 private extension AppleNotesMarkdownRenderer {
+    struct NormalizedRenderRun {
+        var fragment: String
+        var run: AppleNotesDecodedAttributeRun
+    }
+
+    func normalizedRenderRuns(
+        noteText: String,
+        attributeRuns: [AppleNotesDecodedAttributeRun]
+    ) -> [NormalizedRenderRun] {
+        let string = noteText as NSString
+        var offset = 0
+        var normalizedRuns: [NormalizedRenderRun] = []
+        var paragraphRuns: [NormalizedRenderRun] = []
+
+        func flushParagraphRuns() {
+            guard !paragraphRuns.isEmpty else { return }
+
+            let paragraphStyle = paragraphRuns.lazy.compactMap(\.run.paragraphStyle).first
+            if let paragraphStyle {
+                for var renderRun in paragraphRuns {
+                    if renderRun.run.paragraphStyle == nil {
+                        renderRun.run.paragraphStyle = paragraphStyle
+                    }
+                    normalizedRuns.append(renderRun)
+                }
+            } else {
+                normalizedRuns.append(contentsOf: paragraphRuns)
+            }
+
+            paragraphRuns.removeAll(keepingCapacity: true)
+        }
+
+        for run in attributeRuns {
+            let fragment = string.safeSubstring(location: offset, length: run.length)
+            offset += run.length
+
+            for segment in fragment.splitIncludingNormalizedNewlines() {
+                if segment == "\n" {
+                    flushParagraphRuns()
+                    normalizedRuns.append(NormalizedRenderRun(fragment: segment, run: run))
+                    continue
+                }
+
+                paragraphRuns.append(NormalizedRenderRun(fragment: segment, run: run))
+            }
+        }
+
+        flushParagraphRuns()
+        return normalizedRuns
+    }
+
     struct RenderState {
         let options: AppleNotesMarkdownRenderOptions
         var output = ""
@@ -831,6 +876,47 @@ private extension String {
             } else {
                 current.append(character)
             }
+        }
+
+        if !current.isEmpty {
+            pieces.append(current)
+        }
+
+        return pieces
+    }
+
+    func splitIncludingNormalizedNewlines() -> [String] {
+        var pieces: [String] = []
+        var current = ""
+        var index = startIndex
+
+        while index < endIndex {
+            let character = self[index]
+
+            if character == "\r" {
+                if !current.isEmpty {
+                    pieces.append(current)
+                    current.removeAll(keepingCapacity: true)
+                }
+
+                let nextIndex = self.index(after: index)
+                if nextIndex < endIndex, self[nextIndex] == "\n" {
+                    index = nextIndex
+                }
+
+                pieces.append("\n")
+            } else if character == "\n" {
+                if !current.isEmpty {
+                    pieces.append(current)
+                    current.removeAll(keepingCapacity: true)
+                }
+
+                pieces.append("\n")
+            } else {
+                current.append(character)
+            }
+
+            index = self.index(after: index)
         }
 
         if !current.isEmpty {
