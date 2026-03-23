@@ -54,6 +54,9 @@ struct IncrementalSyncPlannerTests {
         #expect(plan.exports.map(\.manifestEntry.id).contains(AppleNotesSyncDocument.canonicalID(for: 1)))
         #expect(plan.exports.map(\.manifestEntry.id).contains(AppleNotesSyncDocument.canonicalID(for: 2)))
         #expect(plan.removedRecords.map(\.noteID) == [AppleNotesSyncDocument.canonicalID(for: 4)])
+        #expect(plan.processedNoteCount == 2)
+        #expect(plan.addedNoteCount == 1)
+        #expect(plan.updatedNoteCount == 1)
         #expect(plan.skippedLockedNotes == 1)
         #expect(plan.unchangedNoteCount == 0)
     }
@@ -94,6 +97,9 @@ struct IncrementalSyncPlannerTests {
         )
 
         #expect(plan.exports.isEmpty)
+        #expect(plan.processedNoteCount == 1)
+        #expect(plan.addedNoteCount == 0)
+        #expect(plan.updatedNoteCount == 0)
         #expect(plan.unchangedNoteCount == 1)
     }
 
