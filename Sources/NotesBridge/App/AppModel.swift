@@ -779,7 +779,9 @@ final class AppModel: ObservableObject {
                 return IncrementalSyncResult(
                     folders: plan.folders,
                     updatedRecords: updatedRecords,
-                    exportedNoteCount: plan.exports.count,
+                    processedNoteCount: plan.processedNoteCount,
+                    addedNoteCount: plan.addedNoteCount,
+                    updatedNoteCount: plan.updatedNoteCount,
                     removedNoteCount: movedRemovedNotes,
                     unchangedNoteCount: plan.unchangedNoteCount,
                     timings: timings,
@@ -807,14 +809,14 @@ final class AppModel: ObservableObject {
             let timingSummary = result.timings.summary(persistIndex: persistDuration)
             let diagnosticsSummary = result.diagnostics.summary
 
-            if result.exportedNoteCount == 0 && result.removedNoteCount == 0 {
+            if result.addedNoteCount == 0 && result.updatedNoteCount == 0 && result.removedNoteCount == 0 {
                 if trigger != .automatic {
-                    statusMessage = "\(t("No Apple Notes changes were found.")) \(timingSummary)"
+                    statusMessage = "\(tf("Processed %lld note(s) and found no changes.", result.processedNoteCount)) \(timingSummary)"
                 }
                 return
             }
 
-            statusMessage = "\(tf("Synced %lld changed note(s), moved %lld note(s) to _Removed, and left %lld note(s) unchanged.", result.exportedNoteCount, result.removedNoteCount, result.unchangedNoteCount)) \(timingSummary)\(diagnosticsSummary.isEmpty ? "" : " \(diagnosticsSummary)")"
+            statusMessage = "\(tf("Processed %lld note(s): updated %lld, added %lld, moved %lld to _Removed, and left %lld unchanged.", result.processedNoteCount, result.updatedNoteCount, result.addedNoteCount, result.removedNoteCount, result.unchangedNoteCount)) \(timingSummary)\(diagnosticsSummary.isEmpty ? "" : " \(diagnosticsSummary)")"
         } catch let error as IncrementalSyncExecutionError {
             if error.shouldFallbackToFullSync {
                 statusMessage = t("Incremental sync fell back to a full sync because the change manifest was incomplete.")
@@ -976,10 +978,12 @@ final class AppModel: ObservableObject {
                 func planExports(
                     groups: [FolderExportGroup],
                     indexedRelativePaths: [String: String]
-                ) -> ([PlannedFolderExportGroup], [String: String], Set<String>) {
+                ) -> ([PlannedFolderExportGroup], [String: String], Set<String>, Int, Int) {
                     var occupiedRelativePaths = Set(indexedRelativePaths.values)
                     var plannedRelativePathsBySourceIdentifier: [String: String] = [:]
                     var migratedLegacyIDs: Set<String> = []
+                    var addedNoteCount = 0
+                    var updatedNoteCount = 0
                     var plannedGroups: [PlannedFolderExportGroup] = []
 
                     for group in groups {
@@ -1019,6 +1023,11 @@ final class AppModel: ObservableObject {
                             occupiedRelativePaths.insert(plannedRelativePath)
                             plannedRelativePathsBySourceIdentifier[document.sourceNoteIdentifier] = plannedRelativePath
                             plannedRelativePathsBySourceIdentifier[document.id] = plannedRelativePath
+                            if existingRelativePath == nil {
+                                addedNoteCount += 1
+                            } else {
+                                updatedNoteCount += 1
+                            }
                             plannedDocuments.append(
                                 PlannedDocumentExport(
                                     document: document,
@@ -1038,7 +1047,7 @@ final class AppModel: ObservableObject {
                         )
                     }
 
-                    return (plannedGroups, plannedRelativePathsBySourceIdentifier, migratedLegacyIDs)
+                    return (plannedGroups, plannedRelativePathsBySourceIdentifier, migratedLegacyIDs, addedNoteCount, updatedNoteCount)
                 }
 
                 let loadSnapshotStart = Date()
@@ -1090,7 +1099,7 @@ final class AppModel: ObservableObject {
                 AppLog.sync.info(
                     "Built \(exportGroups.count) export group(s) from \(snapshot.documents.count) document(s); fallbackGroupedDocuments=\(fallbackDocumentCount)."
                 )
-                let (plannedGroups, plannedRelativePathsBySourceIdentifier, migratedLegacyIDs) = planExports(
+                let (plannedGroups, plannedRelativePathsBySourceIdentifier, migratedLegacyIDs, addedNoteCount, updatedNoteCount) = planExports(
                     groups: exportGroups,
                     indexedRelativePaths: indexedRelativePaths
                 )
@@ -1158,6 +1167,9 @@ final class AppModel: ObservableObject {
                 return FullSyncResult(
                     folders: folders,
                     exportedFolderCount: plannedGroups.count,
+                    processedNoteCount: snapshot.documents.count,
+                    addedNoteCount: addedNoteCount,
+                    updatedNoteCount: updatedNoteCount,
                     records: records,
                     timings: timings,
                     diagnostics: diagnostics,
@@ -1186,7 +1198,7 @@ final class AppModel: ObservableObject {
             let timingSummary = result.timings.summary(persistIndex: persistDuration)
             let diagnosticsSummary = result.diagnostics.summary
             print("Sync timings: \(timingSummary)")
-            statusMessage = "\(tf("Synced %lld note(s) across %lld folder(s).", result.records.count, result.exportedFolderCount)) \(timingSummary)\(diagnosticsSummary.isEmpty ? "" : " \(diagnosticsSummary)")"
+            statusMessage = "\(tf("Processed %lld note(s) across %lld folder(s): updated %lld, added %lld.", result.processedNoteCount, result.exportedFolderCount, result.updatedNoteCount, result.addedNoteCount)) \(timingSummary)\(diagnosticsSummary.isEmpty ? "" : " \(diagnosticsSummary)")"
         } catch {
             present(error, fallback: t("Failed to sync Apple Notes to Obsidian."))
         }
@@ -1380,6 +1392,9 @@ final class AppModel: ObservableObject {
 private struct FullSyncResult {
     var folders: [AppleNotesFolder]
     var exportedFolderCount: Int
+    var processedNoteCount: Int
+    var addedNoteCount: Int
+    var updatedNoteCount: Int
     var records: [SyncRecord]
     var timings: SyncTimings
     var diagnostics: SyncDiagnostics
@@ -1389,7 +1404,9 @@ private struct FullSyncResult {
 private struct IncrementalSyncResult {
     var folders: [AppleNotesFolder]
     var updatedRecords: [String: SyncRecord]
-    var exportedNoteCount: Int
+    var processedNoteCount: Int
+    var addedNoteCount: Int
+    var updatedNoteCount: Int
     var removedNoteCount: Int
     var unchangedNoteCount: Int
     var timings: IncrementalSyncTimings

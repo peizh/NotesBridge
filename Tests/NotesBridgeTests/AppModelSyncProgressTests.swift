@@ -68,7 +68,7 @@ struct AppModelSyncProgressTests {
         #expect(sawNotesAdvanceBeforeFolderCompletion)
         #expect(sawCompletedFirstFolder)
         #expect(model.syncProgress == nil)
-        #expect(model.statusMessage.contains("Synced 3 note(s) across 2 folder(s)."))
+        #expect(model.statusMessage.contains("Processed 3 note(s) across 2 folder(s): updated 0, added 3."))
     }
 
     @MainActor
