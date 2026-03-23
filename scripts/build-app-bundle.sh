@@ -135,6 +135,26 @@ add_app_framework_rpath() {
     install_name_tool -add_rpath "@executable_path/../Frameworks" "$MACOS_PATH/$APP_NAME"
 }
 
+resolve_sparkle_framework_source() {
+    local build_output_framework="$BUILD_BIN_PATH/Sparkle.framework"
+    local artifact_framework="$ROOT_DIR/.build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
+
+    if [[ -d "$build_output_framework" ]]; then
+        SPARKLE_FRAMEWORK_SOURCE="$build_output_framework"
+        return
+    fi
+
+    if [[ -d "$artifact_framework" ]]; then
+        SPARKLE_FRAMEWORK_SOURCE="$artifact_framework"
+        return
+    fi
+
+    echo "Sparkle.framework not found in build output or SwiftPM artifacts" >&2
+    echo "  tried: $build_output_framework" >&2
+    echo "  tried: $artifact_framework" >&2
+    exit 1
+}
+
 copy_support_frameworks() {
     if [[ ! -d "$SPARKLE_FRAMEWORK_SOURCE" ]]; then
         echo "Sparkle.framework not found at $SPARKLE_FRAMEWORK_SOURCE" >&2
@@ -179,7 +199,7 @@ codesign_support_frameworks() {
 echo "Building NotesBridge ($BUILD_CONFIG)..."
 BUILD_BIN_PATH="$(swift build --package-path "$ROOT_DIR" -c "$BUILD_CONFIG" --show-bin-path)"
 EXECUTABLE_PATH="$BUILD_BIN_PATH/NotesBridge"
-SPARKLE_FRAMEWORK_SOURCE="$BUILD_BIN_PATH/Sparkle.framework"
+resolve_sparkle_framework_source
 
 if [[ ! -x "$EXECUTABLE_PATH" ]]; then
     echo "Expected executable was not produced at $EXECUTABLE_PATH" >&2
