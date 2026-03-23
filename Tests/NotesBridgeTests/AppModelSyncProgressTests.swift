@@ -173,7 +173,7 @@ struct AppModelSyncProgressTests {
 
     @MainActor
     private func makeTestAppUpdater() -> NoOpAppUpdater {
-        NoOpAppUpdater(version: AppVersion(shortVersionString: "0.2.2", buildNumber: "1"))
+        NoOpAppUpdater(version: AppVersion(shortVersionString: "0.2.3", buildNumber: "1"))
     }
 }
 

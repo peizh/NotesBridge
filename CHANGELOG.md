@@ -4,6 +4,19 @@ All notable user-visible changes to NotesBridge should be documented here.
 
 This file is the source of truth for GitHub Release notes and Sparkle update notes.
 
+## [0.2.3] - 2026-03-23
+
+### Fixed
+
+- Fixed Apple Notes code blocks where the first character could render outside the Markdown code fence after sync.
+- Fixed fragmented `mailto:` links and adjacent strikethrough text in synced note bodies.
+
+### Distribution
+
+- Direct-download build.
+- Ad-hoc signed.
+- Not notarized yet.
+
 ## [0.2.2] - 2026-03-23
 
 ### Added

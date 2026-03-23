@@ -7,7 +7,7 @@ BUILD_CONFIG="release"
 OUTPUT_DIR="$ROOT_DIR/dist"
 APP_NAME="NotesBridge"
 BUNDLE_ID="dev.notesbridge.app"
-VERSION="0.2.2"
+VERSION="0.2.3"
 BUILD_NUMBER="1"
 SIGN_IDENTITY="-"
 TEAM_ID=""
@@ -24,7 +24,7 @@ Options:
   --output-dir PATH       Output directory for the bundle (default: ./dist)
   --app-name NAME         App bundle name (default: NotesBridge)
   --bundle-id ID          CFBundleIdentifier (default: dev.notesbridge.app)
-  --version VERSION       CFBundleShortVersionString (default: 0.2.2)
+  --version VERSION       CFBundleShortVersionString (default: 0.2.3)
   --build-number NUMBER   CFBundleVersion (default: 1)
   --sign-identity NAME    codesign identity (default: ad-hoc "-")
   --team-id TEAM          Optional TeamIdentifier for Info.plist
