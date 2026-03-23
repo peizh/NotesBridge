@@ -45,6 +45,11 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=$version" >> "$GITHUB_OUTPUT"
           echo "build_number=${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${{ inputs.notarize }}" == "true" ]]; then
+            echo "notarize=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "notarize=0" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Extract release notes from changelog
         id: notes
@@ -55,7 +60,7 @@ jobs:
           echo "path=$NOTES_PATH" >> "$GITHUB_OUTPUT"
 
       - name: Import signing certificate
-        if: ${{ inputs.notarize || github.ref_type == 'tag' }}
+        if: ${{ steps.meta.outputs.notarize == '1' }}
         env:
           BUILD_CERTIFICATE_BASE64: ${{ secrets.MACOS_DEVELOPER_ID_CERT_BASE64 }}
           P12_PASSWORD: ${{ secrets.MACOS_DEVELOPER_ID_CERT_PASSWORD }}
@@ -83,7 +88,7 @@ jobs:
           NOTESBRIDGE_BUNDLE_ID: dev.notesbridge.app
           NOTESBRIDGE_SIGN_IDENTITY: ${{ secrets.MACOS_DEVELOPER_ID_APPLICATION }}
           NOTESBRIDGE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          NOTESBRIDGE_NOTARIZE: ${{ (inputs.notarize || github.ref_type == 'tag') && '1' || '0' }}
+          NOTESBRIDGE_NOTARIZE: ${{ steps.meta.outputs.notarize }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
