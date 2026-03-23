@@ -64,6 +64,7 @@ if [[ ! -x "$GENERATE_APPCAST" ]]; then
     exit 1
 fi
 
+RELEASE_TAG="$VERSION"
 VERSION="${VERSION#v}"
 UPDATES_DIR="$SITE_DIR/updates"
 ARCHIVE_NAME="$(basename "$ARCHIVE_PATH")"
@@ -76,7 +77,7 @@ cp "$ARCHIVE_PATH" "$UPDATES_DIR/$ARCHIVE_NAME"
 pushd "$UPDATES_DIR" >/dev/null
 printf '%s' "$SPARKLE_PRIVATE_ED_KEY" | "$GENERATE_APPCAST" \
     --ed-key-file - \
-    --download-url-prefix "https://github.com/$GITHUB_REPOSITORY_SLUG/releases/download/$VERSION/" \
+    --download-url-prefix "https://github.com/$GITHUB_REPOSITORY_SLUG/releases/download/$RELEASE_TAG/" \
     --release-notes-url-prefix "$PAGES_BASE_URL/updates/" \
     --link "https://github.com/$GITHUB_REPOSITORY_SLUG/releases" \
     --maximum-deltas 0 \
