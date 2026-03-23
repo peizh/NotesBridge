@@ -144,6 +144,79 @@ struct ObsidianVaultClientTests {
         #expect(fileContents.contains("[[_attachments/Apple Notes/Inbox/Daily Note/archive.zip]]"))
         #expect(FileManager.default.fileExists(atPath: attachmentRoot.appendingPathComponent("photo.png").path))
         #expect(FileManager.default.fileExists(atPath: attachmentRoot.appendingPathComponent("archive.zip").path))
+        #expect(export.changeKind == .created)
+    }
+
+    @Test
+    func reexportingUnchangedNoteReportsUnchanged() throws {
+        let vaultURL = try makeTemporaryVault()
+        defer { try? FileManager.default.removeItem(at: vaultURL) }
+
+        var settings = AppSettings.default
+        settings.vaultPath = vaultURL.path
+
+        let note = AppleNotesSyncDocument(
+            databaseNoteID: 100,
+            name: "Stable Note",
+            folder: "Inbox",
+            createdAt: nil,
+            updatedAt: nil,
+            shared: false,
+            passwordProtected: false,
+            markdownTemplate: "Body",
+            attachments: []
+        )
+
+        let firstExport = try client.export(note: note, settings: settings, existingRelativePath: nil)
+        let secondExport = try client.export(
+            note: note,
+            settings: settings,
+            existingRelativePath: firstExport.relativePath
+        )
+
+        #expect(firstExport.changeKind == .created)
+        #expect(secondExport.changeKind == .unchanged)
+    }
+
+    @Test
+    func changingExistingNoteContentReportsUpdated() throws {
+        let vaultURL = try makeTemporaryVault()
+        defer { try? FileManager.default.removeItem(at: vaultURL) }
+
+        var settings = AppSettings.default
+        settings.vaultPath = vaultURL.path
+
+        let originalNote = AppleNotesSyncDocument(
+            databaseNoteID: 101,
+            name: "Daily Note",
+            folder: "Inbox",
+            createdAt: nil,
+            updatedAt: nil,
+            shared: false,
+            passwordProtected: false,
+            markdownTemplate: "Body",
+            attachments: []
+        )
+        let firstExport = try client.export(note: originalNote, settings: settings, existingRelativePath: nil)
+
+        let updatedNote = AppleNotesSyncDocument(
+            databaseNoteID: 101,
+            name: "Daily Note",
+            folder: "Inbox",
+            createdAt: nil,
+            updatedAt: nil,
+            shared: false,
+            passwordProtected: false,
+            markdownTemplate: "Body changed",
+            attachments: []
+        )
+        let secondExport = try client.export(
+            note: updatedNote,
+            settings: settings,
+            existingRelativePath: firstExport.relativePath
+        )
+
+        #expect(secondExport.changeKind == .updated)
     }
 
     @Test

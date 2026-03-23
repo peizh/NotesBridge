@@ -68,7 +68,7 @@ struct AppModelSyncProgressTests {
         #expect(sawNotesAdvanceBeforeFolderCompletion)
         #expect(sawCompletedFirstFolder)
         #expect(model.syncProgress == nil)
-        #expect(model.statusMessage.contains("Processed 3 note(s) across 2 folder(s): updated 0, added 3."))
+        #expect(model.statusMessage.contains("Processed 3 note(s) across 2 folder(s): updated 0, added 3, and left 0 unchanged."))
     }
 
     @MainActor
@@ -281,6 +281,7 @@ private struct StubSyncEngine: Syncing {
                 relativePath: plannedRelativePath,
                 sourceUpdatedAt: document.updatedAt
             ),
+            changeKind: existingRelativePath == nil ? .created : .updated,
             unresolvedInternalLinkCount: 0
         )
     }

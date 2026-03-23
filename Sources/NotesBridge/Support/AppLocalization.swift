@@ -221,6 +221,7 @@ struct AppLocalization: Sendable {
             "Incremental sync fell back to a full sync because the change manifest was incomplete.": "由于变更清单不完整，增量同步已回退到完整同步。",
             "Failed to sync changed Apple Notes to Obsidian.": "无法将变更的 Apple Notes 同步到 Obsidian。",
             "Processed %lld note(s) across %lld folder(s): updated %lld, added %lld.": "已处理 %lld 条笔记，涉及 %lld 个文件夹：更新 %lld 条，新增 %lld 条。",
+            "Processed %lld note(s) across %lld folder(s): updated %lld, added %lld, and left %lld unchanged.": "已处理 %lld 条笔记，涉及 %lld 个文件夹：更新 %lld 条，新增 %lld 条，未变化 %lld 条。",
             "Failed to sync Apple Notes to Obsidian.": "无法将 Apple Notes 同步到 Obsidian。",
             "Failed to save app settings.": "无法保存应用设置。",
             "%d%% • %d/%d notes • %d/%d folders": "%d%% • %d/%d 条笔记 • %d/%d 个文件夹",
@@ -352,6 +353,7 @@ struct AppLocalization: Sendable {
             "Incremental sync fell back to a full sync because the change manifest was incomplete.": "La synchronisation incrémentielle est revenue à une synchronisation complète car le manifeste des changements était incomplet.",
             "Failed to sync changed Apple Notes to Obsidian.": "Échec de la synchronisation des notes Apple modifiées vers Obsidian.",
             "Processed %lld note(s) across %lld folder(s): updated %lld, added %lld.": "%lld note(s) traitée(s) dans %lld dossier(s) : %lld mise(s) à jour, %lld ajoutée(s).",
+            "Processed %lld note(s) across %lld folder(s): updated %lld, added %lld, and left %lld unchanged.": "%lld note(s) traitée(s) dans %lld dossier(s) : %lld mise(s) à jour, %lld ajoutée(s), %lld inchangée(s).",
             "Failed to sync Apple Notes to Obsidian.": "Échec de la synchronisation d'Apple Notes vers Obsidian.",
             "%d%% • %d/%d notes • %d/%d folders": "%d%% • %d/%d notes • %d/%d dossiers",
             "Current folder: %@": "Dossier actuel : %@"

@@ -6,8 +6,6 @@ struct IncrementalSyncPlan: Sendable {
     var removedRecords: [SyncRecord]
     var plannedRelativePathsBySourceIdentifier: [String: String]
     var processedNoteCount: Int
-    var addedNoteCount: Int
-    var updatedNoteCount: Int
     var unchangedNoteCount: Int
     var skippedLockedNotes: Int
 }
@@ -41,8 +39,6 @@ struct IncrementalSyncPlanner: Sendable {
         var occupiedRelativePaths = Set(indexedRelativePaths.values)
         var plannedRelativePathsBySourceIdentifier: [String: String] = [:]
         var exports: [PlannedIncrementalDocumentExport] = []
-        var addedNoteCount = 0
-        var updatedNoteCount = 0
         var unchangedNoteCount = 0
 
         for entry in visibleEntries {
@@ -82,11 +78,6 @@ struct IncrementalSyncPlanner: Sendable {
                     plannedRelativePath: plannedRelativePath
                 )
             )
-            if existingRelativePath == nil {
-                addedNoteCount += 1
-            } else {
-                updatedNoteCount += 1
-            }
         }
 
         let removedRecords = syncIndex.records.values
@@ -109,8 +100,6 @@ struct IncrementalSyncPlanner: Sendable {
             removedRecords: removedRecords,
             plannedRelativePathsBySourceIdentifier: plannedRelativePathsBySourceIdentifier,
             processedNoteCount: visibleEntries.count,
-            addedNoteCount: addedNoteCount,
-            updatedNoteCount: updatedNoteCount,
             unchangedNoteCount: unchangedNoteCount,
             skippedLockedNotes: manifest.skippedLockedNotes
         )

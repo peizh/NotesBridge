@@ -12,6 +12,7 @@ protocol Syncing: Sendable {
 
 struct NoteSyncResult: Sendable {
     let record: SyncRecord
+    let changeKind: NoteExportChangeKind
     let unresolvedInternalLinkCount: Int
 }
 
@@ -45,6 +46,7 @@ struct SyncEngine: Syncing {
                 sourceName: document.displayName,
                 sourceFolderPath: document.exportFolderPath
             ),
+            changeKind: export.changeKind,
             unresolvedInternalLinkCount: export.unresolvedInternalLinkCount
         )
     }

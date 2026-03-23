@@ -1,9 +1,16 @@
 import AppKit
 import Foundation
 
+enum NoteExportChangeKind: Sendable {
+    case created
+    case updated
+    case unchanged
+}
+
 struct ObsidianExportResult: Sendable {
     let fileURL: URL
     let relativePath: String
+    let changeKind: NoteExportChangeKind
     let unresolvedInternalLinkCount: Int
 }
 
@@ -16,6 +23,7 @@ struct ObsidianAttachmentStorageResolution: Sendable {
 private struct RenderedMarkdownResult: Sendable {
     let markdown: String
     let unresolvedInternalLinkCount: Int
+    let attachmentsChanged: Bool
 }
 
 enum ObsidianVaultError: LocalizedError {
@@ -103,6 +111,9 @@ struct ObsidianVaultClient: Sendable {
                 return fileManager.fileExists(atPath: vaultURL.appendingPathComponent(candidateRelativePath).path)
             }
         let fileURL = vaultURL.appendingPathComponent(relativePath)
+        let sourceURL = existingRelativePath.map { vaultURL.appendingPathComponent($0) }
+        let noteFileExistedBeforeExport = fileManager.fileExists(atPath: fileURL.path)
+            || sourceURL.map { fileManager.fileExists(atPath: $0.path) } == true
         try fileManager.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         let obsoleteAttachmentDirectories = attachmentMigrationCandidates(
             existingRelativePath: existingRelativePath,
@@ -110,16 +121,18 @@ struct ObsidianVaultClient: Sendable {
             vaultURL: vaultURL,
             settings: settings
         )
+        var noteFileMoved = false
+        var attachmentsChanged = false
 
         if let existingRelativePath,
            existingRelativePath != relativePath
         {
-            try moveNoteFileIfNeeded(
+            noteFileMoved = try moveNoteFileIfNeeded(
                 from: vaultURL.appendingPathComponent(existingRelativePath),
                 to: fileURL,
                 fileManager: fileManager
             )
-            try moveAttachmentDirectoryIfNeeded(
+            attachmentsChanged = try moveAttachmentDirectoryIfNeeded(
                 from: obsoleteAttachmentDirectories,
                 to: attachmentDirectoryURL(
                     forNoteRelativePath: relativePath,
@@ -139,7 +152,8 @@ struct ObsidianVaultClient: Sendable {
             fileManager: fileManager,
             plannedRelativePathsBySourceIdentifier: plannedRelativePathsBySourceIdentifier
         )
-        try removeObsoleteAttachmentDirectories(
+        attachmentsChanged = attachmentsChanged || renderedMarkdown.attachmentsChanged
+        attachmentsChanged = try removeObsoleteAttachmentDirectories(
             obsoleteAttachmentDirectories,
             excluding: attachmentDirectoryURL(
                 forNoteRelativePath: relativePath,
@@ -148,13 +162,28 @@ struct ObsidianVaultClient: Sendable {
             ),
             fileManager: fileManager
         )
+            || attachmentsChanged
         let frontMatter = frontMatter(for: note)
         let contents = frontMatter + renderedMarkdown.markdown.trimmingCharacters(in: .whitespacesAndNewlines) + "\n"
-        try contents.write(to: fileURL, atomically: true, encoding: .utf8)
+        let existingContents = try? String(contentsOf: fileURL, encoding: .utf8)
+        let noteFileChanged = existingContents != contents
+        if noteFileChanged {
+            try contents.write(to: fileURL, atomically: true, encoding: .utf8)
+        }
+
+        let changeKind: NoteExportChangeKind
+        if !noteFileExistedBeforeExport {
+            changeKind = .created
+        } else if noteFileMoved || noteFileChanged || attachmentsChanged {
+            changeKind = .updated
+        } else {
+            changeKind = .unchanged
+        }
 
         return ObsidianExportResult(
             fileURL: fileURL,
             relativePath: relativePath,
+            changeKind: changeKind,
             unresolvedInternalLinkCount: renderedMarkdown.unresolvedInternalLinkCount
         )
     }
@@ -288,24 +317,29 @@ struct ObsidianVaultClient: Sendable {
         let legacyAttachmentDirectoryURL = legacyAttachmentDirectoryURL(for: fileURL)
 
         if note.attachments.isEmpty {
+            var attachmentsChanged = false
             if fileManager.fileExists(atPath: attachmentDirectoryURL.path) {
                 try? fileManager.removeItem(at: attachmentDirectoryURL)
+                attachmentsChanged = true
             }
             if fileManager.fileExists(atPath: legacyAttachmentDirectoryURL.path),
                legacyAttachmentDirectoryURL.standardizedFileURL != attachmentDirectoryURL.standardizedFileURL
             {
                 try? fileManager.removeItem(at: legacyAttachmentDirectoryURL)
+                attachmentsChanged = true
             }
             return renderInternalLinks(
                 in: markdown,
                 for: note,
-                plannedRelativePathsBySourceIdentifier: plannedRelativePathsBySourceIdentifier
+                plannedRelativePathsBySourceIdentifier: plannedRelativePathsBySourceIdentifier,
+                attachmentsChanged: attachmentsChanged
             )
         }
 
         try fileManager.createDirectory(at: attachmentDirectoryURL, withIntermediateDirectories: true)
         var occupiedFileNames: Set<String> = []
         var expectedFileNames: Set<String> = []
+        var attachmentsChanged = false
 
         for attachment in note.attachments {
             let fileName = resolveAttachmentFileName(
@@ -316,11 +350,11 @@ struct ObsidianVaultClient: Sendable {
             expectedFileNames.insert(fileName)
 
             let destinationURL = attachmentDirectoryURL.appendingPathComponent(fileName, isDirectory: false)
-            try copyAttachmentIfNeeded(
+            attachmentsChanged = try copyAttachmentIfNeeded(
                 attachment,
                 to: destinationURL,
                 fileManager: fileManager
-            )
+            ) || attachmentsChanged
             let attachmentRelativePath = joinRelativePath(attachmentDirectoryRelativePath, fileName)
 
             let renderedLink = switch attachment.renderStyle {
@@ -335,23 +369,25 @@ struct ObsidianVaultClient: Sendable {
             )
         }
 
-        try removeStaleAttachments(
+        attachmentsChanged = try removeStaleAttachments(
             in: attachmentDirectoryURL,
             keepingFileNames: expectedFileNames,
             fileManager: fileManager
-        )
+        ) || attachmentsChanged
 
         return renderInternalLinks(
             in: markdown,
             for: note,
-            plannedRelativePathsBySourceIdentifier: plannedRelativePathsBySourceIdentifier
+            plannedRelativePathsBySourceIdentifier: plannedRelativePathsBySourceIdentifier,
+            attachmentsChanged: attachmentsChanged
         )
     }
 
     private func renderInternalLinks(
         in markdown: String,
         for note: AppleNotesSyncDocument,
-        plannedRelativePathsBySourceIdentifier: [String: String]
+        plannedRelativePathsBySourceIdentifier: [String: String],
+        attachmentsChanged: Bool
     ) -> RenderedMarkdownResult {
         var renderedMarkdown = markdown
         var unresolvedInternalLinkCount = 0
@@ -382,7 +418,8 @@ struct ObsidianVaultClient: Sendable {
 
         return RenderedMarkdownResult(
             markdown: renderedMarkdown,
-            unresolvedInternalLinkCount: unresolvedInternalLinkCount
+            unresolvedInternalLinkCount: unresolvedInternalLinkCount,
+            attachmentsChanged: attachmentsChanged
         )
     }
 
@@ -390,23 +427,24 @@ struct ObsidianVaultClient: Sendable {
         from sourceURL: URL,
         to destinationURL: URL,
         fileManager: FileManager
-    ) throws {
+    ) throws -> Bool {
         guard fileManager.fileExists(atPath: sourceURL.path),
               sourceURL.standardizedFileURL != destinationURL.standardizedFileURL,
               !fileManager.fileExists(atPath: destinationURL.path)
         else {
-            return
+            return false
         }
 
         try fileManager.createDirectory(at: destinationURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         try fileManager.moveItem(at: sourceURL, to: destinationURL)
+        return true
     }
 
     private func moveAttachmentDirectoryIfNeeded(
         from sourceURLs: [URL],
         to destinationURL: URL,
         fileManager: FileManager
-    ) throws {
+    ) throws -> Bool {
         for sourceURL in sourceURLs {
             guard fileManager.fileExists(atPath: sourceURL.path),
                   sourceURL.standardizedFileURL != destinationURL.standardizedFileURL,
@@ -417,19 +455,20 @@ struct ObsidianVaultClient: Sendable {
 
             try fileManager.createDirectory(at: destinationURL.deletingLastPathComponent(), withIntermediateDirectories: true)
             try fileManager.moveItem(at: sourceURL, to: destinationURL)
-            return
+            return true
         }
+        return false
     }
 
     private func copyAttachmentIfNeeded(
         _ attachment: AppleNotesSyncAttachment,
         to destinationURL: URL,
         fileManager: FileManager
-    ) throws {
+    ) throws -> Bool {
         if fileManager.fileExists(atPath: destinationURL.path),
            attachmentFileMatchesSource(attachment, destinationURL: destinationURL)
         {
-            return
+            return false
         }
 
         if fileManager.fileExists(atPath: destinationURL.path) {
@@ -440,6 +479,7 @@ struct ObsidianVaultClient: Sendable {
         if let modifiedAt = attachment.modifiedAt {
             try? fileManager.setAttributes([.modificationDate: modifiedAt], ofItemAtPath: destinationURL.path)
         }
+        return true
     }
 
     private func attachmentFileMatchesSource(
@@ -472,7 +512,8 @@ struct ObsidianVaultClient: Sendable {
         in directoryURL: URL,
         keepingFileNames: Set<String>,
         fileManager: FileManager
-    ) throws {
+    ) throws -> Bool {
+        var didChange = false
         let existingFiles = try fileManager.contentsOfDirectory(
             at: directoryURL,
             includingPropertiesForKeys: [.isRegularFileKey],
@@ -481,6 +522,7 @@ struct ObsidianVaultClient: Sendable {
 
         for fileURL in existingFiles where !keepingFileNames.contains(fileURL.lastPathComponent) {
             try? fileManager.removeItem(at: fileURL)
+            didChange = true
         }
 
         let remainingFiles = try fileManager.contentsOfDirectory(
@@ -490,7 +532,9 @@ struct ObsidianVaultClient: Sendable {
         )
         if remainingFiles.isEmpty {
             try? fileManager.removeItem(at: directoryURL)
+            didChange = true
         }
+        return didChange
     }
 
     private func frontMatter(for note: AppleNotesSyncDocument) -> String {
@@ -801,7 +845,8 @@ struct ObsidianVaultClient: Sendable {
         _ candidateURLs: [URL],
         excluding destinationURL: URL,
         fileManager: FileManager
-    ) throws {
+    ) throws -> Bool {
+        var didChange = false
         for candidateURL in candidateURLs {
             guard candidateURL.standardizedFileURL != destinationURL.standardizedFileURL,
                   fileManager.fileExists(atPath: candidateURL.path)
@@ -809,7 +854,9 @@ struct ObsidianVaultClient: Sendable {
                 continue
             }
             try? fileManager.removeItem(at: candidateURL)
+            didChange = true
         }
+        return didChange
     }
 
     private func yamlEscaped(_ value: String) -> String {

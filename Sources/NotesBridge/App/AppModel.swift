@@ -719,6 +719,9 @@ final class AppModel: ObservableObject {
                 }
 
                 var updatedRecords = syncIndexSnapshot.records
+                var addedNoteCount = 0
+                var updatedNoteCount = 0
+                var exportedUnchangedNoteCount = 0
                 var unresolvedInternalLinks = 0
                 let groupedExports = Dictionary(grouping: plan.exports) { $0.manifestEntry.folderDisplayName }
                     .sorted { $0.key.localizedCaseInsensitiveCompare($1.key) == .orderedAscending }
@@ -753,6 +756,14 @@ final class AppModel: ObservableObject {
                         )
                         timings.export += Date().timeIntervalSince(exportStart)
                         updatedRecords[syncResult.record.noteID] = syncResult.record
+                        switch syncResult.changeKind {
+                        case .created:
+                            addedNoteCount += 1
+                        case .updated:
+                            updatedNoteCount += 1
+                        case .unchanged:
+                            exportedUnchangedNoteCount += 1
+                        }
                         unresolvedInternalLinks += syncResult.unresolvedInternalLinkCount
                         mutableProgress.markProcessedNotes()
                         await progressReporter.publish(mutableProgress)
@@ -780,10 +791,10 @@ final class AppModel: ObservableObject {
                     folders: plan.folders,
                     updatedRecords: updatedRecords,
                     processedNoteCount: plan.processedNoteCount,
-                    addedNoteCount: plan.addedNoteCount,
-                    updatedNoteCount: plan.updatedNoteCount,
+                    addedNoteCount: addedNoteCount,
+                    updatedNoteCount: updatedNoteCount,
                     removedNoteCount: movedRemovedNotes,
-                    unchangedNoteCount: plan.unchangedNoteCount,
+                    unchangedNoteCount: plan.unchangedNoteCount + exportedUnchangedNoteCount,
                     timings: timings,
                     diagnostics: IncrementalSyncDiagnostics(
                         skippedNotes: plan.skippedLockedNotes,
@@ -978,12 +989,10 @@ final class AppModel: ObservableObject {
                 func planExports(
                     groups: [FolderExportGroup],
                     indexedRelativePaths: [String: String]
-                ) -> ([PlannedFolderExportGroup], [String: String], Set<String>, Int, Int) {
+                ) -> ([PlannedFolderExportGroup], [String: String], Set<String>) {
                     var occupiedRelativePaths = Set(indexedRelativePaths.values)
                     var plannedRelativePathsBySourceIdentifier: [String: String] = [:]
                     var migratedLegacyIDs: Set<String> = []
-                    var addedNoteCount = 0
-                    var updatedNoteCount = 0
                     var plannedGroups: [PlannedFolderExportGroup] = []
 
                     for group in groups {
@@ -1023,11 +1032,6 @@ final class AppModel: ObservableObject {
                             occupiedRelativePaths.insert(plannedRelativePath)
                             plannedRelativePathsBySourceIdentifier[document.sourceNoteIdentifier] = plannedRelativePath
                             plannedRelativePathsBySourceIdentifier[document.id] = plannedRelativePath
-                            if existingRelativePath == nil {
-                                addedNoteCount += 1
-                            } else {
-                                updatedNoteCount += 1
-                            }
                             plannedDocuments.append(
                                 PlannedDocumentExport(
                                     document: document,
@@ -1047,7 +1051,7 @@ final class AppModel: ObservableObject {
                         )
                     }
 
-                    return (plannedGroups, plannedRelativePathsBySourceIdentifier, migratedLegacyIDs, addedNoteCount, updatedNoteCount)
+                    return (plannedGroups, plannedRelativePathsBySourceIdentifier, migratedLegacyIDs)
                 }
 
                 let loadSnapshotStart = Date()
@@ -1099,7 +1103,7 @@ final class AppModel: ObservableObject {
                 AppLog.sync.info(
                     "Built \(exportGroups.count) export group(s) from \(snapshot.documents.count) document(s); fallbackGroupedDocuments=\(fallbackDocumentCount)."
                 )
-                let (plannedGroups, plannedRelativePathsBySourceIdentifier, migratedLegacyIDs, addedNoteCount, updatedNoteCount) = planExports(
+                let (plannedGroups, plannedRelativePathsBySourceIdentifier, migratedLegacyIDs) = planExports(
                     groups: exportGroups,
                     indexedRelativePaths: indexedRelativePaths
                 )
@@ -1107,6 +1111,9 @@ final class AppModel: ObservableObject {
                     "Planned \(plannedGroups.count) folder export group(s), \(plannedRelativePathsBySourceIdentifier.count) note path mapping(s), migratedLegacyIDs=\(migratedLegacyIDs.count)."
                 )
                 var records: [SyncRecord] = []
+                var addedNoteCount = 0
+                var updatedNoteCount = 0
+                var unchangedNoteCount = 0
                 var progress = SyncProgress(
                     completedNotes: 0,
                     totalNotes: folders.reduce(0) { $0 + $1.noteCount },
@@ -1132,6 +1139,14 @@ final class AppModel: ObservableObject {
                         )
                         timings.export += Date().timeIntervalSince(exportStart)
                         records.append(syncResult.record)
+                        switch syncResult.changeKind {
+                        case .created:
+                            addedNoteCount += 1
+                        case .updated:
+                            updatedNoteCount += 1
+                        case .unchanged:
+                            unchangedNoteCount += 1
+                        }
                         diagnostics.unresolvedInternalLinks += syncResult.unresolvedInternalLinkCount
                         AppLog.export.debug(
                             "Exported note \(plannedDocument.document.id, privacy: .public) to \(syncResult.record.relativePath, privacy: .public); unresolvedInternalLinks=\(syncResult.unresolvedInternalLinkCount)."
@@ -1170,6 +1185,7 @@ final class AppModel: ObservableObject {
                     processedNoteCount: snapshot.documents.count,
                     addedNoteCount: addedNoteCount,
                     updatedNoteCount: updatedNoteCount,
+                    unchangedNoteCount: unchangedNoteCount,
                     records: records,
                     timings: timings,
                     diagnostics: diagnostics,
@@ -1198,7 +1214,7 @@ final class AppModel: ObservableObject {
             let timingSummary = result.timings.summary(persistIndex: persistDuration)
             let diagnosticsSummary = result.diagnostics.summary
             print("Sync timings: \(timingSummary)")
-            statusMessage = "\(tf("Processed %lld note(s) across %lld folder(s): updated %lld, added %lld.", result.processedNoteCount, result.exportedFolderCount, result.updatedNoteCount, result.addedNoteCount)) \(timingSummary)\(diagnosticsSummary.isEmpty ? "" : " \(diagnosticsSummary)")"
+            statusMessage = "\(tf("Processed %lld note(s) across %lld folder(s): updated %lld, added %lld, and left %lld unchanged.", result.processedNoteCount, result.exportedFolderCount, result.updatedNoteCount, result.addedNoteCount, result.unchangedNoteCount)) \(timingSummary)\(diagnosticsSummary.isEmpty ? "" : " \(diagnosticsSummary)")"
         } catch {
             present(error, fallback: t("Failed to sync Apple Notes to Obsidian."))
         }
@@ -1395,6 +1411,7 @@ private struct FullSyncResult {
     var processedNoteCount: Int
     var addedNoteCount: Int
     var updatedNoteCount: Int
+    var unchangedNoteCount: Int
     var records: [SyncRecord]
     var timings: SyncTimings
     var diagnostics: SyncDiagnostics
