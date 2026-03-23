@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version (for example 1.0.0 or v1.0.0)"
+        description: "Release version (for example 1.0.0)"
         required: true
         type: string
       notarize:
@@ -14,7 +14,7 @@ on:
         type: boolean
   push:
     tags:
-      - "v*"
+      - "[0-9]*.[0-9]*.[0-9]*"
 
 jobs:
   build-release:
@@ -26,6 +26,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
@@ -41,11 +43,19 @@ jobs:
           fi
           version="${version#v}"
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$version" >> "$GITHUB_OUTPUT"
           echo "build_number=${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
 
+      - name: Extract release notes from changelog
+        id: notes
+        shell: bash
+        run: |
+          NOTES_PATH="$RUNNER_TEMP/NotesBridge-${{ steps.meta.outputs.version }}-macOS.md"
+          ./scripts/release-notes-from-changelog.sh "${{ steps.meta.outputs.version }}" > "$NOTES_PATH"
+          echo "path=$NOTES_PATH" >> "$GITHUB_OUTPUT"
+
       - name: Import signing certificate
-        if: ${{ inputs.notarize || startsWith(github.ref, 'refs/tags/v') }}
+        if: ${{ inputs.notarize || github.ref_type == 'tag' }}
         env:
           BUILD_CERTIFICATE_BASE64: ${{ secrets.MACOS_DEVELOPER_ID_CERT_BASE64 }}
           P12_PASSWORD: ${{ secrets.MACOS_DEVELOPER_ID_CERT_PASSWORD }}
@@ -73,7 +83,7 @@ jobs:
           NOTESBRIDGE_BUNDLE_ID: dev.notesbridge.app
           NOTESBRIDGE_SIGN_IDENTITY: ${{ secrets.MACOS_DEVELOPER_ID_APPLICATION }}
           NOTESBRIDGE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          NOTESBRIDGE_NOTARIZE: ${{ (inputs.notarize || startsWith(github.ref, 'refs/tags/v')) && '1' || '0' }}
+          NOTESBRIDGE_NOTARIZE: ${{ (inputs.notarize || github.ref_type == 'tag') && '1' || '0' }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
@@ -98,15 +108,80 @@ jobs:
             dist/NotesBridge-${{ steps.meta.outputs.version }}-macOS.zip
 
       - name: Create or update GitHub release
-        if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          gh release create "${{ steps.meta.outputs.tag }}" \
-            "dist/NotesBridge-${{ steps.meta.outputs.version }}-macOS.zip" \
-            --title "NotesBridge ${{ steps.meta.outputs.version }}" \
-            --notes "Direct download build for macOS." \
-          || gh release upload "${{ steps.meta.outputs.tag }}" \
-            "dist/NotesBridge-${{ steps.meta.outputs.version }}-macOS.zip" \
-            --clobber
+          RELEASE_TAG="${{ steps.meta.outputs.tag }}"
+          RELEASE_TITLE="NotesBridge ${{ steps.meta.outputs.version }}"
+          RELEASE_ASSET="dist/NotesBridge-${{ steps.meta.outputs.version }}-macOS.zip"
+          RELEASE_NOTES="${{ steps.notes.outputs.path }}"
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "$RELEASE_ASSET" --clobber
+            gh release edit "$RELEASE_TAG" \
+              --title "$RELEASE_TITLE" \
+              --notes-file "$RELEASE_NOTES"
+          else
+            gh release create "$RELEASE_TAG" \
+              "$RELEASE_ASSET" \
+              --target "$GITHUB_SHA" \
+              --title "$RELEASE_TITLE" \
+              --notes-file "$RELEASE_NOTES"
+          fi
+
+      - name: Prepare GitHub Pages checkout
+        id: pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          SITE_DIR="$RUNNER_TEMP/gh-pages"
+          REMOTE_URL="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+
+          if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
+            git clone --depth 1 --branch gh-pages "$REMOTE_URL" "$SITE_DIR"
+          else
+            mkdir -p "$SITE_DIR"
+            git init "$SITE_DIR"
+            (
+              cd "$SITE_DIR"
+              git checkout --orphan gh-pages
+              git remote add origin "$REMOTE_URL"
+            )
+          fi
+
+          touch "$SITE_DIR/.nojekyll"
+          mkdir -p "$SITE_DIR/updates"
+          echo "site_dir=$SITE_DIR" >> "$GITHUB_OUTPUT"
+
+      - name: Generate Sparkle appcast
+        env:
+          SPARKLE_PRIVATE_ED_KEY: ${{ secrets.SPARKLE_PRIVATE_ED_KEY }}
+        shell: bash
+        run: |
+          ./scripts/publish-sparkle-appcast.sh \
+            --version "${{ steps.meta.outputs.version }}" \
+            --archive "dist/NotesBridge-${{ steps.meta.outputs.version }}-macOS.zip" \
+            --release-notes "${{ steps.notes.outputs.path }}" \
+            --site-dir "${{ steps.pages.outputs.site_dir }}"
+
+      - name: Publish GitHub Pages content
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          SITE_DIR="${{ steps.pages.outputs.site_dir }}"
+          cd "$SITE_DIR"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+
+          if git diff --cached --quiet; then
+            echo "No GitHub Pages changes to publish."
+            exit 0
+          fi
+
+          git commit -m "Publish Sparkle appcast for ${{ steps.meta.outputs.version }}"
+          git push origin HEAD:gh-pages

@@ -102,6 +102,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var slashKeyboardNavigationAvailable = true
     @Published private(set) var slashDiagnostics: [String] = []
     @Published private(set) var appleNotesDataAccessStatus: AppleNotesDataFolderAccessStatus?
+    @Published private(set) var updateState: AppUpdateState
     @Published var errorMessage: String?
     @Published var statusMessage = "Ready" {
         didSet {
@@ -116,6 +117,7 @@ final class AppModel: ObservableObject {
     private let vaultClient: ObsidianVaultClient
     private let bundledAppLauncher: BundledAppLauncher
     private let persistence: any PersistenceStoring
+    private let appUpdater: any AppUpdating
     private let permissionsManager: PermissionsManager
     private let notesContextMonitor: NotesContextMonitor
     private let formattingCommandExecutor: FormattingCommandExecutor
@@ -135,10 +137,13 @@ final class AppModel: ObservableObject {
         vaultClient: ObsidianVaultClient = ObsidianVaultClient(),
         bundledAppLauncher: BundledAppLauncher = BundledAppLauncher(),
         persistence: any PersistenceStoring = PersistenceStore(),
+        buildFlavor: BuildFlavor = .current,
+        appUpdater: (any AppUpdating)? = nil,
         permissionsManager: PermissionsManager = PermissionsManager(),
         statusObserver: (@MainActor @Sendable (String) -> Void)? = nil,
         startImmediately: Bool = true
     ) {
+        let resolvedBuildFlavor = buildFlavor
         self.notesClient = notesClient
         self.appleNotesSyncDataSource = appleNotesSyncDataSource
         self.appleNotesDataFolderSelector = appleNotesDataFolderSelector
@@ -146,13 +151,16 @@ final class AppModel: ObservableObject {
         self.vaultClient = vaultClient
         self.bundledAppLauncher = bundledAppLauncher
         self.persistence = persistence
+        let resolvedAppUpdater = appUpdater ?? AppUpdaterFactory.make(buildFlavor: resolvedBuildFlavor)
+        self.appUpdater = resolvedAppUpdater
         self.permissionsManager = permissionsManager
-        self.buildFlavor = BuildFlavor.current
+        self.buildFlavor = resolvedBuildFlavor
+        self.updateState = resolvedAppUpdater.currentState
 
         let loadedSettings = persistence.loadSettings()
         let loadedSyncIndex = persistence.loadSyncIndex()
         let notesContextMonitor = NotesContextMonitor(
-            buildFlavor: BuildFlavor.current,
+            buildFlavor: resolvedBuildFlavor,
             permissionsManager: permissionsManager,
             settings: loadedSettings
         )
@@ -175,7 +183,7 @@ final class AppModel: ObservableObject {
         self.slashCommandEngine = slashCommandEngine
         self.formattingBarController = formattingBarController
         self.statusObserver = statusObserver
-        self.interactionAvailability = .default(for: BuildFlavor.current)
+        self.interactionAvailability = .default(for: resolvedBuildFlavor)
         self.slashCommandEngine.onKeyboardNavigationAvailabilityChanged = { [weak self] isAvailable in
             self?.slashKeyboardNavigationAvailable = isAvailable
         }
@@ -220,6 +228,38 @@ final class AppModel: ObservableObject {
 
     var localizedBuildFlavorTitle: String {
         t(buildFlavor.title)
+    }
+
+    var showsAppUpdateSettings: Bool {
+        updateState.isEnabled
+    }
+
+    var currentAppVersion: String {
+        updateState.currentVersion.shortVersionString
+    }
+
+    var currentAppBuildNumber: String {
+        updateState.currentVersion.buildNumber
+    }
+
+    var currentAppVersionDisplay: String {
+        let buildNumber = currentAppBuildNumber.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !buildNumber.isEmpty else {
+            return currentAppVersion
+        }
+        return "\(currentAppVersion) (\(buildNumber))"
+    }
+
+    var canCheckForUpdates: Bool {
+        updateState.canCheckForUpdates
+    }
+
+    var automaticallyChecksForUpdates: Bool {
+        updateState.automaticallyChecksForUpdates
+    }
+
+    var automaticallyDownloadsUpdates: Bool {
+        updateState.automaticallyDownloadsUpdates
     }
 
     var syncedNoteCount: Int {
@@ -348,6 +388,18 @@ final class AppModel: ObservableObject {
 
     func resetSlashCommandItems() {
         settings.slashCommandItems = SlashCommandItemSetting.default
+    }
+
+    func checkForUpdates() {
+        appUpdater.checkForUpdates()
+    }
+
+    func setAutomaticallyChecksForUpdates(_ enabled: Bool) {
+        appUpdater.setAutomaticallyChecksForUpdates(enabled)
+    }
+
+    func setAutomaticallyDownloadsUpdates(_ enabled: Bool) {
+        appUpdater.setAutomaticallyDownloadsUpdates(enabled)
     }
 
     func requestAccessibilityPermission() {
@@ -907,6 +959,13 @@ final class AppModel: ObservableObject {
     }
 
     private func bindInteractionState() {
+        appUpdater.statePublisher
+            .receive(on: RunLoop.main)
+            .sink { [weak self] state in
+                self?.updateState = state
+            }
+            .store(in: &cancellables)
+
         notesContextMonitor.$availability
             .receive(on: RunLoop.main)
             .sink { [weak self] availability in

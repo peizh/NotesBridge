@@ -14,12 +14,14 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/scinfu/SwiftSoup.git", exact: "2.9.6"),
+        .package(url: "https://github.com/sparkle-project/Sparkle.git", exact: "2.9.0"),
     ],
     targets: [
         .executableTarget(
             name: "NotesBridge",
             dependencies: [
                 .product(name: "SwiftSoup", package: "SwiftSoup"),
+                .product(name: "Sparkle", package: "Sparkle"),
             ]
         ),
         .testTarget(

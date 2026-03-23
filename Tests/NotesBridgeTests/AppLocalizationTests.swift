@@ -8,6 +8,7 @@ struct AppLocalizationTests {
 
         #expect(localization.text("NotesBridge Settings") == "NotesBridge 设置")
         #expect(localization.text("Sync All Notes to Obsidian") == "同步全部笔记到 Obsidian")
+        #expect(localization.text("Automatically check for updates") == "自动检查更新")
     }
 
     @Test

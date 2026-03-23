@@ -19,8 +19,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func presentUITestWindow() {
+        let appModel = AppRuntime.shared.appModel
         let rootView = SettingsView()
-            .environmentObject(AppRuntime.shared.appModel)
+            .environmentObject(appModel)
             .frame(width: 640, height: 560)
             .padding(24)
         let hostingController = NSHostingController(rootView: rootView)
@@ -31,6 +32,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.center()
         window.makeKeyAndOrderFront(nil)
         uiTestWindow = window
+        AppRuntime.shared.uiTestRecorder?.recordSettingsSnapshot(
+            UITestSettingsSnapshot(
+                buildFlavor: appModel.buildFlavor.rawValue,
+                currentVersion: appModel.currentAppVersion,
+                currentVersionDisplay: appModel.currentAppVersionDisplay,
+                currentBuildNumber: appModel.currentAppBuildNumber,
+                showsAppUpdateSettings: appModel.showsAppUpdateSettings,
+                canCheckForUpdates: appModel.canCheckForUpdates,
+                automaticallyChecksForUpdates: appModel.automaticallyChecksForUpdates,
+                automaticallyDownloadsUpdates: appModel.automaticallyDownloadsUpdates
+            )
+        )
     }
 
     private func scheduleUITestAutomationIfNeeded() {

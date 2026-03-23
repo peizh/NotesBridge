@@ -29,7 +29,7 @@ APP_BUNDLE_PATH="$APP_SUPPORT_DIR/NotesBridge.app"
     --output-dir "$APP_SUPPORT_DIR" \
     --app-name "NotesBridge" \
     --bundle-id "dev.notesbridge.app" \
-    --version "1.0" \
+    --version "0.2.2" \
     --build-number "1"
 
 echo "Bundled app ready:"

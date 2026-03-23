@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 
 enum AppLaunchMode {
@@ -51,6 +52,7 @@ struct UITestConfiguration: Sendable {
     let vaultURL: URL
     let appleNotesDataURL: URL
     let statusFileURL: URL
+    let settingsSnapshotFileURL: URL
     let windowReadyFileURL: URL
 
     init?(environment: [String: String]) {
@@ -70,6 +72,7 @@ struct UITestConfiguration: Sendable {
         self.vaultURL = rootURL.appendingPathComponent("vault", isDirectory: true)
         self.appleNotesDataURL = rootURL.appendingPathComponent("group.com.apple.notes", isDirectory: true)
         self.statusFileURL = rootURL.appendingPathComponent("ui-test-status.txt", isDirectory: false)
+        self.settingsSnapshotFileURL = rootURL.appendingPathComponent("ui-test-settings.json", isDirectory: false)
         self.windowReadyFileURL = rootURL.appendingPathComponent("ui-test-window-ready", isDirectory: false)
     }
 
@@ -93,9 +96,10 @@ enum AppModelFactory {
     ) -> AppModel {
         switch launchMode {
         case .normal:
-            AppModel()
+            return AppModel()
         case let .uiTesting(configuration):
-            AppModel(
+            let buildFlavor = BuildFlavor.current
+            return AppModel(
                 notesClient: UITestAppleNotesClient(),
                 appleNotesSyncDataSource: UITestAppleNotesSyncDataSource(),
                 appleNotesDataFolderSelector: UITestAppleNotesDataFolderSelector(
@@ -103,6 +107,18 @@ enum AppModelFactory {
                 ),
                 syncEngine: SyncEngine(),
                 persistence: UITestPersistenceStore(settings: configuration.settings),
+                buildFlavor: buildFlavor,
+                appUpdater: UITestAppUpdater(
+                    state: buildFlavor == .directDownload
+                        ? AppUpdateState(
+                            isEnabled: true,
+                            currentVersion: AppVersion.current(),
+                            canCheckForUpdates: true,
+                            automaticallyChecksForUpdates: true,
+                            automaticallyDownloadsUpdates: false
+                        )
+                        : .disabled(version: AppVersion.current())
+                ),
                 statusObserver: { statusMessage in
                     uiTestRecorder?.recordStatus(statusMessage)
                 },
@@ -119,10 +135,12 @@ enum UITestAutomationAction: String, Sendable {
 @MainActor
 final class UITestArtifactRecorder {
     private let statusFileURL: URL
+    private let settingsSnapshotFileURL: URL
     private let windowReadyFileURL: URL
 
     init(configuration: UITestConfiguration) {
         self.statusFileURL = configuration.statusFileURL
+        self.settingsSnapshotFileURL = configuration.settingsSnapshotFileURL
         self.windowReadyFileURL = configuration.windowReadyFileURL
     }
 
@@ -132,6 +150,13 @@ final class UITestArtifactRecorder {
 
     func recordStatus(_ statusMessage: String) {
         try? statusMessage.write(to: statusFileURL, atomically: true, encoding: .utf8)
+    }
+
+    func recordSettingsSnapshot(_ snapshot: UITestSettingsSnapshot) {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let data = try? encoder.encode(snapshot)
+        try? data?.write(to: settingsSnapshotFileURL, options: .atomic)
     }
 }
 
@@ -178,6 +203,62 @@ private struct UITestAppleNotesClient: AppleNotesClient {
     }
 
     func updateNote(id: String, htmlBody: String) throws {}
+}
+
+struct UITestSettingsSnapshot: Codable, Equatable {
+    let buildFlavor: String
+    let currentVersion: String
+    let currentVersionDisplay: String
+    let currentBuildNumber: String
+    let showsAppUpdateSettings: Bool
+    let canCheckForUpdates: Bool
+    let automaticallyChecksForUpdates: Bool
+    let automaticallyDownloadsUpdates: Bool
+}
+
+@MainActor
+private final class UITestAppUpdater: AppUpdating {
+    private let subject: CurrentValueSubject<AppUpdateState, Never>
+
+    init(state: AppUpdateState) {
+        self.subject = CurrentValueSubject(state)
+    }
+
+    var currentState: AppUpdateState {
+        subject.value
+    }
+
+    var statePublisher: AnyPublisher<AppUpdateState, Never> {
+        subject.eraseToAnyPublisher()
+    }
+
+    func checkForUpdates() {}
+
+    func setAutomaticallyChecksForUpdates(_ enabled: Bool) {
+        let current = subject.value
+        subject.send(
+            AppUpdateState(
+                isEnabled: current.isEnabled,
+                currentVersion: current.currentVersion,
+                canCheckForUpdates: current.canCheckForUpdates,
+                automaticallyChecksForUpdates: enabled,
+                automaticallyDownloadsUpdates: enabled ? current.automaticallyDownloadsUpdates : false
+            )
+        )
+    }
+
+    func setAutomaticallyDownloadsUpdates(_ enabled: Bool) {
+        let current = subject.value
+        subject.send(
+            AppUpdateState(
+                isEnabled: current.isEnabled,
+                currentVersion: current.currentVersion,
+                canCheckForUpdates: current.canCheckForUpdates,
+                automaticallyChecksForUpdates: current.automaticallyChecksForUpdates,
+                automaticallyDownloadsUpdates: enabled
+            )
+        )
+    }
 }
 
 private struct UITestAppleNotesSyncDataSource: AppleNotesSyncDataSourcing {

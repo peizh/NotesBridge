@@ -43,6 +43,7 @@ struct BundledAppLauncher {
     private func prepareBundledApp() throws -> URL {
         let appURL = try bundledAppURL()
         let fileManager = FileManager.default
+        let appVersion = AppVersion.current(bundle: .main)
 
         if fileManager.fileExists(atPath: appURL.path) {
             try fileManager.removeItem(at: appURL)
@@ -63,8 +64,8 @@ struct BundledAppLauncher {
             "CFBundleInfoDictionaryVersion": "6.0",
             "CFBundleName": "NotesBridge",
             "CFBundlePackageType": "APPL",
-            "CFBundleShortVersionString": "1.0",
-            "CFBundleVersion": "1",
+            "CFBundleShortVersionString": appVersion.shortVersionString,
+            "CFBundleVersion": appVersion.buildNumber,
             "LSUIElement": true,
         ]
         let plistData = try PropertyListSerialization.data(

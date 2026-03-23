@@ -12,9 +12,14 @@ struct SettingsView: View {
                 .accessibilityIdentifier("settings.title")
 
             Form {
-                Section(appModel.t("Distribution")) {
+                Section(appModel.t("Version")) {
                     LabeledContent(appModel.t("Build")) {
                         Text(appModel.localizedBuildFlavorTitle)
+                    }
+
+                    LabeledContent(appModel.t("Version")) {
+                        Text(appModel.currentAppVersionDisplay)
+                            .accessibilityIdentifier("settings.currentVersion")
                     }
 
                     Picker(
@@ -35,6 +40,36 @@ struct SettingsView: View {
                             : appModel.t("This build only exposes settings, sync, and integration features.")
                     )
                     .foregroundStyle(.secondary)
+
+                    if appModel.showsAppUpdateSettings {
+                        Button(appModel.t("Check for Updates...")) {
+                            appModel.checkForUpdates()
+                        }
+                        .disabled(!appModel.canCheckForUpdates)
+                        .accessibilityIdentifier("settings.checkForUpdates")
+
+                        Toggle(
+                            appModel.t("Automatically check for updates"),
+                            isOn: Binding(
+                                get: { appModel.automaticallyChecksForUpdates },
+                                set: { appModel.setAutomaticallyChecksForUpdates($0) }
+                            )
+                        )
+                        .accessibilityIdentifier("settings.automaticallyChecksForUpdates")
+
+                        Toggle(
+                            appModel.t("Automatically download and install updates"),
+                            isOn: Binding(
+                                get: { appModel.automaticallyDownloadsUpdates },
+                                set: { appModel.setAutomaticallyDownloadsUpdates($0) }
+                            )
+                        )
+                        .disabled(!appModel.automaticallyChecksForUpdates)
+                        .accessibilityIdentifier("settings.automaticallyDownloadsUpdates")
+
+                        Text(appModel.t("NotesBridge checks GitHub Releases through Sparkle for direct-download updates."))
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 Section(appModel.t("Permissions")) {

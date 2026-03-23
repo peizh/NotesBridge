@@ -37,6 +37,7 @@ struct AppModelSyncProgressTests {
             appleNotesSyncDataSource: syncDataSource,
             syncEngine: StubSyncEngine(syncDelay: 0.01),
             persistence: StubPersistenceStore(settings: settings),
+            appUpdater: makeTestAppUpdater(),
             startImmediately: false
         )
 
@@ -99,6 +100,7 @@ struct AppModelSyncProgressTests {
                 syncDelay: 0.01
             ),
             persistence: StubPersistenceStore(settings: settings),
+            appUpdater: makeTestAppUpdater(),
             startImmediately: false
         )
 
@@ -167,6 +169,11 @@ struct AppModelSyncProgressTests {
 
     private func note(id: String, name: String, folder: String) -> AppleNotesSyncDocument {
         Self.note(id: id, name: name, folder: folder)
+    }
+
+    @MainActor
+    private func makeTestAppUpdater() -> NoOpAppUpdater {
+        NoOpAppUpdater(version: AppVersion(shortVersionString: "0.2.2", buildNumber: "1"))
     }
 }
 

@@ -7,11 +7,13 @@ BUILD_CONFIG="release"
 OUTPUT_DIR="$ROOT_DIR/dist"
 APP_NAME="NotesBridge"
 BUNDLE_ID="dev.notesbridge.app"
-VERSION="1.0.0"
+VERSION="0.2.2"
 BUILD_NUMBER="1"
 SIGN_IDENTITY="-"
 TEAM_ID=""
 LAUNCH_AFTER_BUILD=0
+SPARKLE_FEED_URL="${NOTESBRIDGE_SPARKLE_FEED_URL:-https://peizh.github.io/NoteBridge/updates/appcast.xml}"
+SPARKLE_PUBLIC_ED_KEY="${NOTESBRIDGE_SPARKLE_PUBLIC_ED_KEY:-0Gcbr/JsQLrUXt36na4JMUNt7S9/+GIVr3fNSE8q1F4=}"
 
 usage() {
     cat <<EOF
@@ -22,7 +24,7 @@ Options:
   --output-dir PATH       Output directory for the bundle (default: ./dist)
   --app-name NAME         App bundle name (default: NotesBridge)
   --bundle-id ID          CFBundleIdentifier (default: dev.notesbridge.app)
-  --version VERSION       CFBundleShortVersionString (default: 1.0.0)
+  --version VERSION       CFBundleShortVersionString (default: 0.2.2)
   --build-number NUMBER   CFBundleVersion (default: 1)
   --sign-identity NAME    codesign identity (default: ad-hoc "-")
   --team-id TEAM          Optional TeamIdentifier for Info.plist
@@ -79,11 +81,14 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
-EXECUTABLE_PATH="$ROOT_DIR/.build/$BUILD_CONFIG/NotesBridge"
+BUILD_BIN_PATH=""
+EXECUTABLE_PATH=""
+SPARKLE_FRAMEWORK_SOURCE=""
 APP_BUNDLE_PATH="$OUTPUT_DIR/$APP_NAME.app"
 CONTENTS_PATH="$APP_BUNDLE_PATH/Contents"
 MACOS_PATH="$CONTENTS_PATH/MacOS"
 RESOURCES_PATH="$CONTENTS_PATH/Resources"
+FRAMEWORKS_PATH="$CONTENTS_PATH/Frameworks"
 INFO_PLIST_PATH="$CONTENTS_PATH/Info.plist"
 DESIGNATED_REQUIREMENT="=designated => identifier \"$BUNDLE_ID\""
 ICON_SOURCE_PATH="$ROOT_DIR/images/notesbridge-app-icon.svg"
@@ -126,8 +131,55 @@ build_app_icon() {
     rm -rf "$ICONSET_PATH" "$rendered_dir"
 }
 
+add_app_framework_rpath() {
+    install_name_tool -add_rpath "@executable_path/../Frameworks" "$MACOS_PATH/$APP_NAME"
+}
+
+copy_support_frameworks() {
+    if [[ ! -d "$SPARKLE_FRAMEWORK_SOURCE" ]]; then
+        echo "Sparkle.framework not found at $SPARKLE_FRAMEWORK_SOURCE" >&2
+        exit 1
+    fi
+
+    ditto "$SPARKLE_FRAMEWORK_SOURCE" "$FRAMEWORKS_PATH/Sparkle.framework"
+}
+
+codesign_nested_item() {
+    local path="$1"
+    if [[ ! -e "$path" ]]; then
+        return
+    fi
+
+    codesign \
+        --force \
+        --sign "$SIGN_IDENTITY" \
+        "$path" >/dev/null
+}
+
+codesign_support_frameworks() {
+    local sparkle_framework="$FRAMEWORKS_PATH/Sparkle.framework"
+    local sparkle_current="$sparkle_framework/Versions/Current"
+
+    if [[ ! -d "$sparkle_framework" ]]; then
+        return
+    fi
+
+    codesign_nested_item "$sparkle_current/Autoupdate"
+    codesign_nested_item "$sparkle_current/Updater.app"
+
+    if compgen -G "$sparkle_current/XPCServices/*.xpc" >/dev/null; then
+        for xpc_service in "$sparkle_current"/XPCServices/*.xpc; do
+            codesign_nested_item "$xpc_service"
+        done
+    fi
+
+    codesign_nested_item "$sparkle_framework"
+}
+
 echo "Building NotesBridge ($BUILD_CONFIG)..."
-swift build --package-path "$ROOT_DIR" -c "$BUILD_CONFIG"
+BUILD_BIN_PATH="$(swift build --package-path "$ROOT_DIR" -c "$BUILD_CONFIG" --show-bin-path)"
+EXECUTABLE_PATH="$BUILD_BIN_PATH/NotesBridge"
+SPARKLE_FRAMEWORK_SOURCE="$BUILD_BIN_PATH/Sparkle.framework"
 
 if [[ ! -x "$EXECUTABLE_PATH" ]]; then
     echo "Expected executable was not produced at $EXECUTABLE_PATH" >&2
@@ -138,8 +190,11 @@ echo "Packaging app bundle at $APP_BUNDLE_PATH..."
 rm -rf "$APP_BUNDLE_PATH"
 mkdir -p "$MACOS_PATH"
 mkdir -p "$RESOURCES_PATH"
+mkdir -p "$FRAMEWORKS_PATH"
 cp "$EXECUTABLE_PATH" "$MACOS_PATH/$APP_NAME"
+add_app_framework_rpath
 build_app_icon
+copy_support_frameworks
 
 cat > "$INFO_PLIST_PATH" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -166,6 +221,18 @@ cat > "$INFO_PLIST_PATH" <<PLIST
     <string>$BUILD_NUMBER</string>
     <key>LSUIElement</key>
     <true/>
+    <key>SUAutomaticallyUpdate</key>
+    <false/>
+    <key>SUEnableAutomaticChecks</key>
+    <true/>
+    <key>SUFeedURL</key>
+    <string>$SPARKLE_FEED_URL</string>
+    <key>SUPublicEDKey</key>
+    <string>$SPARKLE_PUBLIC_ED_KEY</string>
+    <key>SURequireSignedFeed</key>
+    <true/>
+    <key>SUVerifyUpdateBeforeExtraction</key>
+    <true/>
 $(if [[ -n "$TEAM_ID" ]]; then cat <<TEAM
     <key>TeamIdentifier</key>
     <string>$TEAM_ID</string>
@@ -175,12 +242,13 @@ fi)
 </plist>
 PLIST
 
+codesign_support_frameworks
+
 codesign \
     --force \
     --sign "$SIGN_IDENTITY" \
     --identifier "$BUNDLE_ID" \
     --requirements "$DESIGNATED_REQUIREMENT" \
-    --deep \
     "$APP_BUNDLE_PATH" >/dev/null
 
 echo "App bundle ready:"
@@ -189,6 +257,7 @@ echo "  version=$VERSION"
 echo "  build=$BUILD_NUMBER"
 echo "  bundle_id=$BUNDLE_ID"
 echo "  codesign_identity=$SIGN_IDENTITY"
+echo "  sparkle_feed_url=$SPARKLE_FEED_URL"
 
 if [[ "$LAUNCH_AFTER_BUILD" -eq 1 ]]; then
     open -n "$APP_BUNDLE_PATH"
