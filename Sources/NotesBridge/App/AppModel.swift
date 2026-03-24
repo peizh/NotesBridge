@@ -695,12 +695,14 @@ final class AppModel: ObservableObject {
                         defer { accessSession.stopAccessing() }
                         return try appleNotesSyncDataSource.loadDocuments(
                             fromDataFolder: accessSession.url.path,
-                            noteIDs: noteIDsToLoad
+                            noteIDs: noteIDsToLoad,
+                            preferredDatabaseRelativePath: manifest.selectedDatabaseRelativePath
                         )
                     }
                     return try appleNotesSyncDataSource.loadDocuments(
                         fromDataFolder: dataFolderSelection.rootURL.path,
-                        noteIDs: noteIDsToLoad
+                        noteIDs: noteIDsToLoad,
+                        preferredDatabaseRelativePath: manifest.selectedDatabaseRelativePath
                     )
                 }()
                 timings.loadChangedDocuments = Date().timeIntervalSince(loadDocumentsStart)
@@ -713,8 +715,11 @@ final class AppModel: ObservableObject {
                     missingDocumentIDs.append(plannedExport.manifestEntry.id)
                 }
                 if !missingDocumentIDs.isEmpty {
+                    AppLog.sync.warning(
+                        "Incremental sync could not load \(missingDocumentIDs.count) changed note(s) by ID: \(missingDocumentIDs.joined(separator: ", "), privacy: .public)"
+                    )
                     throw IncrementalSyncExecutionError.missingChangedDocuments(
-                        "Incremental sync could not load \(missingDocumentIDs.count) changed note(s): \(missingDocumentIDs.joined(separator: ", "))"
+                        missingDocumentIDs
                     )
                 }
 
@@ -830,12 +835,11 @@ final class AppModel: ObservableObject {
             statusMessage = "\(tf("Processed %lld note(s): updated %lld, added %lld, moved %lld to _Removed, and left %lld unchanged.", result.processedNoteCount, result.updatedNoteCount, result.addedNoteCount, result.removedNoteCount, result.unchangedNoteCount)) \(timingSummary)\(diagnosticsSummary.isEmpty ? "" : " \(diagnosticsSummary)")"
         } catch let error as IncrementalSyncExecutionError {
             if error.shouldFallbackToFullSync {
-                statusMessage = t("Incremental sync fell back to a full sync because the change manifest was incomplete.")
                 isSyncing = false
                 stopSyncAnimation()
                 syncProgress = nil
                 dataFolderAccess.accessSession?.stopAccessing()
-                await runFullSync()
+                await runFullSync(context: .incrementalFallback(missingCount: error.missingDocumentCount))
                 return
             }
             present(error, fallback: t("Failed to sync changed Apple Notes to Obsidian."))
@@ -848,7 +852,7 @@ final class AppModel: ObservableObject {
         await runFullSync()
     }
 
-    func runFullSync() async {
+    func runFullSync(context: FullSyncRunContext = .direct) async {
         guard hasVaultConfigured else {
             presentMessage(t("Choose an Obsidian vault before syncing."))
             return
@@ -871,7 +875,7 @@ final class AppModel: ObservableObject {
         startSyncAnimation()
         syncProgress = nil
         errorMessage = nil
-        statusMessage = t("Running a full Apple Notes sync...")
+        statusMessage = context.initialStatusMessage(localize: t)
 
         defer {
             isSyncing = false
@@ -1214,7 +1218,12 @@ final class AppModel: ObservableObject {
             let timingSummary = result.timings.summary(persistIndex: persistDuration)
             let diagnosticsSummary = result.diagnostics.summary
             print("Sync timings: \(timingSummary)")
-            statusMessage = "\(tf("Processed %lld note(s) across %lld folder(s): updated %lld, added %lld, and left %lld unchanged.", result.processedNoteCount, result.exportedFolderCount, result.updatedNoteCount, result.addedNoteCount, result.unchangedNoteCount)) \(timingSummary)\(diagnosticsSummary.isEmpty ? "" : " \(diagnosticsSummary)")"
+            let resultSummary = "\(tf("Processed %lld note(s) across %lld folder(s): updated %lld, added %lld, and left %lld unchanged.", result.processedNoteCount, result.exportedFolderCount, result.updatedNoteCount, result.addedNoteCount, result.unchangedNoteCount)) \(timingSummary)\(diagnosticsSummary.isEmpty ? "" : " \(diagnosticsSummary)")"
+            statusMessage = context.finalStatusMessage(
+                resultSummary: resultSummary,
+                localize: t,
+                format: tf
+            )
         } catch {
             present(error, fallback: t("Failed to sync Apple Notes to Obsidian."))
         }
@@ -1445,12 +1454,12 @@ private enum FullSyncExecutionError: LocalizedError {
 }
 
 private enum IncrementalSyncExecutionError: LocalizedError {
-    case missingChangedDocuments(String)
+    case missingChangedDocuments([String])
 
     var errorDescription: String? {
         switch self {
-        case let .missingChangedDocuments(details):
-            details
+        case let .missingChangedDocuments(noteIDs):
+            return "Incremental sync could not load \(noteIDs.count) changed note(s) by ID: \(noteIDs.joined(separator: ", "))"
         }
     }
 
@@ -1458,6 +1467,48 @@ private enum IncrementalSyncExecutionError: LocalizedError {
         switch self {
         case .missingChangedDocuments:
             true
+        }
+    }
+
+    var missingDocumentCount: Int {
+        switch self {
+        case let .missingChangedDocuments(noteIDs):
+            return noteIDs.count
+        }
+    }
+}
+
+enum FullSyncRunContext {
+    case direct
+    case incrementalFallback(missingCount: Int)
+
+    func initialStatusMessage(localize: (String) -> String) -> String {
+        switch self {
+        case .direct:
+            return localize("Running a full Apple Notes sync...")
+        case let .incrementalFallback(missingCount):
+            return String(
+                format: localize("Incremental sync could not load %lld changed note(s) by ID, so it fell back to a full sync."),
+                locale: .current,
+                missingCount
+            )
+        }
+    }
+
+    func finalStatusMessage(
+        resultSummary: String,
+        localize: (String) -> String,
+        format: (String, CVarArg...) -> String
+    ) -> String {
+        switch self {
+        case .direct:
+            return format("Full sync: %@", resultSummary)
+        case let .incrementalFallback(missingCount):
+            return format(
+                "Incremental sync could not load %lld changed note(s) by ID, so it fell back to a full sync. %@",
+                missingCount,
+                format("Full sync: %@", resultSummary)
+            )
         }
     }
 }

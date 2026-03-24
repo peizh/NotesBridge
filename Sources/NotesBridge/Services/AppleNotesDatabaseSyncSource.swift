@@ -7,7 +7,11 @@ protocol AppleNotesSyncDataSourcing: Sendable {
     func inspectDataFolder(at path: String) -> AppleNotesDataFolderAccessStatus
     func fetchFolders(fromDataFolder path: String) throws -> [AppleNotesFolder]
     func loadManifest(fromDataFolder path: String) throws -> AppleNotesSyncManifest
-    func loadDocuments(fromDataFolder path: String, noteIDs: Set<Int64>) throws -> AppleNotesSyncSnapshot
+    func loadDocuments(
+        fromDataFolder path: String,
+        noteIDs: Set<Int64>,
+        preferredDatabaseRelativePath: String?
+    ) throws -> AppleNotesSyncSnapshot
     func loadSnapshot(fromDataFolder path: String) throws -> AppleNotesSyncSnapshot
 }
 
@@ -95,6 +99,18 @@ struct AppleNotesDatabaseSyncSource: AppleNotesSyncDataSourcing {
         self.decoder = decoder
         self.renderer = renderer
         self.mergeableDataDecoder = mergeableDataDecoder
+    }
+
+    func manifestSelectSQL(columns: [String]) -> String {
+        """
+        SELECT
+            \(joinedSelectClause(columns))
+        FROM ziccloudsyncingobject AS n
+        JOIN zicnotedata AS nd ON nd.znote = n.z_pk
+        WHERE n.z_ent = ?
+          AND nd.zdata IS NOT NULL
+        ORDER BY title COLLATE NOCASE
+        """
     }
 
     func validateDataFolder(at path: String) throws -> AppleNotesDataFolderSelection {
@@ -215,6 +231,7 @@ struct AppleNotesDatabaseSyncSource: AppleNotesSyncDataSourcing {
         let selection = try validateDataFolder(at: path)
         let candidateScan = databaseCandidateReport(rootURL: selection.rootURL)
         var bestManifest: AppleNotesSyncManifest?
+        var bestCandidateURL: URL?
         var bestVisibleEntryCount = -1
         var bestTotalEntryCount = -1
         var candidateReports: [AppleNotesDatabaseCandidateReport] = []
@@ -264,6 +281,7 @@ struct AppleNotesDatabaseSyncSource: AppleNotesSyncDataSourcing {
                 || (visibleEntryCount == bestVisibleEntryCount && totalEntryCount > bestTotalEntryCount)
             {
                 bestManifest = manifest
+                bestCandidateURL = candidateURL
                 bestVisibleEntryCount = visibleEntryCount
                 bestTotalEntryCount = totalEntryCount
             }
@@ -274,10 +292,17 @@ struct AppleNotesDatabaseSyncSource: AppleNotesSyncDataSourcing {
         }
 
         bestManifest.sourceDiagnostics = candidateReports.map(\.summary).joined(separator: " | ")
+        bestManifest.selectedDatabaseRelativePath = bestCandidateURL.map {
+            databaseRelativePath(rootURL: selection.rootURL, databaseURL: $0)
+        }
         return bestManifest
     }
 
-    func loadDocuments(fromDataFolder path: String, noteIDs: Set<Int64>) throws -> AppleNotesSyncSnapshot {
+    func loadDocuments(
+        fromDataFolder path: String,
+        noteIDs: Set<Int64>,
+        preferredDatabaseRelativePath: String? = nil
+    ) throws -> AppleNotesSyncSnapshot {
         AppLog.appleNotes.info("Loading \(noteIDs.count) Apple Notes document(s) from data folder: \(path, privacy: .public)")
         guard !noteIDs.isEmpty else {
             let manifest = try loadManifest(fromDataFolder: path)
@@ -292,11 +317,16 @@ struct AppleNotesDatabaseSyncSource: AppleNotesSyncDataSourcing {
 
         let selection = try validateDataFolder(at: path)
         let candidateScan = databaseCandidateReport(rootURL: selection.rootURL)
+        let candidateURLs = targetedLoadCandidateURLs(
+            rootURL: selection.rootURL,
+            candidateScan: candidateScan,
+            preferredDatabaseRelativePath: preferredDatabaseRelativePath
+        )
         var bestSnapshot: AppleNotesSyncSnapshot?
         var bestDocumentCount = -1
         var candidateReports: [AppleNotesDatabaseCandidateReport] = []
 
-        for candidateURL in candidateScan.candidateURLs {
+        for candidateURL in candidateURLs {
             let candidateSelection = AppleNotesDataFolderSelection(
                 rootURL: selection.rootURL,
                 databaseURL: candidateURL
@@ -498,7 +528,9 @@ extension AppleNotesDatabaseSyncSource {
         try fileManager.createDirectory(at: rootDirectory, withIntermediateDirectories: true)
         return rootDirectory
     }
+}
 
+private extension AppleNotesDatabaseSyncSource {
     func makeSnapshotDirectory(fileManager: FileManager = .default) throws -> URL {
         let snapshotDirectory = try snapshotRootDirectory(fileManager: fileManager)
             .appendingPathComponent("NotesBridge-\(UUID().uuidString)", isDirectory: true)
@@ -514,9 +546,7 @@ extension AppleNotesDatabaseSyncSource {
         }
         return snapshotDirectory
     }
-}
-
-private extension AppleNotesDatabaseSyncSource {
+    
     func inspectionCandidateReports(
         rootURL: URL,
         candidateScan: AppleNotesDatabaseCandidateScan
@@ -575,6 +605,35 @@ private extension AppleNotesDatabaseSyncSource {
             )
             return []
         }
+    }
+
+    func targetedLoadCandidateURLs(
+        rootURL: URL,
+        candidateScan: AppleNotesDatabaseCandidateScan,
+        preferredDatabaseRelativePath: String?
+    ) -> [URL] {
+        guard let preferredDatabaseRelativePath,
+              !preferredDatabaseRelativePath.isEmpty
+        else {
+            return candidateScan.candidateURLs
+        }
+
+        let preferredURL = rootURL.appendingPathComponent(preferredDatabaseRelativePath, isDirectory: false)
+        if candidateScan.candidateURLs.contains(preferredURL) {
+            AppLog.appleNotes.info(
+                "Using manifest-selected Apple Notes database for targeted load: \(preferredDatabaseRelativePath, privacy: .public)"
+            )
+            return [preferredURL]
+        }
+
+        AppLog.appleNotes.warning(
+            "Manifest-selected Apple Notes database is no longer visible for targeted load: \(preferredDatabaseRelativePath, privacy: .public). Falling back to all candidates."
+        )
+        return candidateScan.candidateURLs
+    }
+
+    func databaseRelativePath(rootURL: URL, databaseURL: URL) -> String {
+        databaseURL.path.replacingOccurrences(of: rootURL.path + "/", with: "")
     }
 
     func databaseCandidateReport(rootURL: URL) -> AppleNotesDatabaseCandidateScan {
@@ -1144,13 +1203,7 @@ private extension AppleNotesDatabaseSyncSource {
             schema.columnExpression("zispasswordprotected", tableAlias: "n", alias: "passwordProtected", defaultValue: "0"),
         ])
         let rows = try database.rows(
-            """
-            SELECT
-                \(joinedSelectClause(columns))
-            FROM ziccloudsyncingobject AS n
-            WHERE n.z_ent = ?
-            ORDER BY title COLLATE NOCASE
-            """,
+            manifestSelectSQL(columns: columns),
             bindings: [.int(schema.entityID(named: "ICNote"))]
         )
 
