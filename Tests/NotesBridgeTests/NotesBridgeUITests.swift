@@ -47,7 +47,7 @@ final class NotesBridgeUITests: XCTestCase {
         XCTAssertEqual(settingsSnapshot.buildFlavor, "appStore")
         XCTAssertFalse(settingsSnapshot.showsAppUpdateSettings)
 
-        let successText = "Processed 3 note(s) across 2 folder(s): updated 0, added 3, and left 0 unchanged."
+        let successText = "Full sync: Processed 3 note(s) across 2 folder(s): updated 0, added 3, and left 0 unchanged."
         XCTAssertTrue(
             waitForCondition(timeout: 15) {
                 let statusMessage = (try? String(contentsOf: statusFileURL)) ?? ""

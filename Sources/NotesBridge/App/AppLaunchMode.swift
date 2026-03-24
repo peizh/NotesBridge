@@ -295,11 +295,16 @@ private struct UITestAppleNotesSyncDataSource: AppleNotesSyncDataSourcing {
             },
             skippedLockedNotes: 0,
             skippedLockedNotesByFolder: [:],
-            sourceDiagnostics: nil
+            sourceDiagnostics: nil,
+            selectedDatabaseRelativePath: "NoteStore.sqlite"
         )
     }
 
-    func loadDocuments(fromDataFolder path: String, noteIDs: Set<Int64>) throws -> AppleNotesSyncSnapshot {
+    func loadDocuments(
+        fromDataFolder path: String,
+        noteIDs: Set<Int64>,
+        preferredDatabaseRelativePath: String?
+    ) throws -> AppleNotesSyncSnapshot {
         AppleNotesSyncSnapshot(
             folders: UITestFixtures.folders,
             documents: UITestFixtures.documents.filter { noteIDs.contains($0.databaseNoteID) },

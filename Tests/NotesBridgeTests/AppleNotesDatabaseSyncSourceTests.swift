@@ -132,6 +132,17 @@ struct AppleNotesDatabaseSyncSourceTests {
     }
 
     @Test
+    func manifestQueryOnlyIncludesNotesWithLocalBodyData() {
+        let query = dataSource.manifestSelectSQL(columns: [
+            "n.z_pk AS pk",
+            "'' AS title",
+        ])
+
+        #expect(query.contains("JOIN zicnotedata AS nd ON nd.znote = n.z_pk"))
+        #expect(query.contains("AND nd.zdata IS NOT NULL"))
+    }
+
+    @Test
     func stagesSnapshotsUnderUserCachesDirectory() throws {
         let snapshotRoot = try dataSource.snapshotRootDirectory()
 

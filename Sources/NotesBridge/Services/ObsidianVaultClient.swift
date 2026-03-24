@@ -319,14 +319,22 @@ struct ObsidianVaultClient: Sendable {
         if note.attachments.isEmpty {
             var attachmentsChanged = false
             if fileManager.fileExists(atPath: attachmentDirectoryURL.path) {
+                let hadTrackableFiles = directoryContainsTrackableFiles(
+                    at: attachmentDirectoryURL,
+                    fileManager: fileManager
+                )
                 try? fileManager.removeItem(at: attachmentDirectoryURL)
-                attachmentsChanged = true
+                attachmentsChanged = attachmentsChanged || hadTrackableFiles
             }
             if fileManager.fileExists(atPath: legacyAttachmentDirectoryURL.path),
                legacyAttachmentDirectoryURL.standardizedFileURL != attachmentDirectoryURL.standardizedFileURL
             {
+                let hadTrackableFiles = directoryContainsTrackableFiles(
+                    at: legacyAttachmentDirectoryURL,
+                    fileManager: fileManager
+                )
                 try? fileManager.removeItem(at: legacyAttachmentDirectoryURL)
-                attachmentsChanged = true
+                attachmentsChanged = attachmentsChanged || hadTrackableFiles
             }
             return renderInternalLinks(
                 in: markdown,
@@ -453,9 +461,13 @@ struct ObsidianVaultClient: Sendable {
                 continue
             }
 
+            let hadTrackableFiles = directoryContainsTrackableFiles(
+                at: sourceURL,
+                fileManager: fileManager
+            )
             try fileManager.createDirectory(at: destinationURL.deletingLastPathComponent(), withIntermediateDirectories: true)
             try fileManager.moveItem(at: sourceURL, to: destinationURL)
-            return true
+            return hadTrackableFiles
         }
         return false
     }
@@ -532,7 +544,6 @@ struct ObsidianVaultClient: Sendable {
         )
         if remainingFiles.isEmpty {
             try? fileManager.removeItem(at: directoryURL)
-            didChange = true
         }
         return didChange
     }
@@ -853,10 +864,38 @@ struct ObsidianVaultClient: Sendable {
             else {
                 continue
             }
+            let hadTrackableFiles = directoryContainsTrackableFiles(
+                at: candidateURL,
+                fileManager: fileManager
+            )
             try? fileManager.removeItem(at: candidateURL)
-            didChange = true
+            didChange = didChange || hadTrackableFiles
         }
         return didChange
+    }
+
+    private func directoryContainsTrackableFiles(
+        at directoryURL: URL,
+        fileManager: FileManager
+    ) -> Bool {
+        guard let enumerator = fileManager.enumerator(
+            at: directoryURL,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return false
+        }
+
+        for case let fileURL as URL in enumerator {
+            guard let values = try? fileURL.resourceValues(forKeys: [.isRegularFileKey]) else {
+                continue
+            }
+            if values.isRegularFile == true {
+                return true
+            }
+        }
+
+        return false
     }
 
     private func yamlEscaped(_ value: String) -> String {

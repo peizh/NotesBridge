@@ -75,4 +75,5 @@ struct AppleNotesSyncManifest: Sendable {
     var skippedLockedNotes: Int
     var skippedLockedNotesByFolder: [String: Int]
     var sourceDiagnostics: String?
+    var selectedDatabaseRelativePath: String?
 }

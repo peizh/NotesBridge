@@ -179,6 +179,45 @@ struct ObsidianVaultClientTests {
     }
 
     @Test
+    func removingEmptyAttachmentDirectoryDoesNotCountAsUpdated() throws {
+        let vaultURL = try makeTemporaryVault()
+        defer { try? FileManager.default.removeItem(at: vaultURL) }
+
+        var settings = AppSettings.default
+        settings.vaultPath = vaultURL.path
+
+        let note = AppleNotesSyncDocument(
+            databaseNoteID: 1001,
+            name: "Stable Note",
+            folder: "Inbox",
+            createdAt: nil,
+            updatedAt: nil,
+            shared: false,
+            passwordProtected: false,
+            markdownTemplate: "Body",
+            attachments: []
+        )
+
+        let firstExport = try client.export(note: note, settings: settings, existingRelativePath: nil)
+        let emptyAttachmentDirectory = vaultURL.appendingPathComponent(
+            "_attachments/Apple Notes/Inbox/Stable Note",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: emptyAttachmentDirectory,
+            withIntermediateDirectories: true
+        )
+
+        let secondExport = try client.export(
+            note: note,
+            settings: settings,
+            existingRelativePath: firstExport.relativePath
+        )
+
+        #expect(secondExport.changeKind == .unchanged)
+    }
+
+    @Test
     func changingExistingNoteContentReportsUpdated() throws {
         let vaultURL = try makeTemporaryVault()
         defer { try? FileManager.default.removeItem(at: vaultURL) }
