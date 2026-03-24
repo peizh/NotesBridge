@@ -113,6 +113,26 @@ struct SettingsView: View {
                         Text(appModel.t("If NotesBridge is already checked in Accessibility but still shows Required here, remove it and add the current NotesBridge.app bundle again."))
                             .foregroundStyle(.secondary)
                     }
+
+                    if appModel.showsAppUpdateSettings {
+                        LabeledContent(appModel.t("App Management")) {
+                            Text(appModel.appManagementPermissionLabel)
+                                .foregroundStyle(.orange)
+                        }
+
+                        HStack {
+                            Button(appModel.t("Request App Management Permission")) {
+                                appModel.requestAppManagementPermission()
+                            }
+
+                            Button(appModel.t("Open App Management Settings")) {
+                                appModel.openAppManagementSettings()
+                            }
+                        }
+
+                        Text(appModel.appManagementPermissionSummary)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 Section(appModel.t("Inline Enhancements")) {

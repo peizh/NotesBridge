@@ -42,6 +42,27 @@ final class PermissionsManager: ObservableObject {
         return NSWorkspace.shared.open(url) || openSystemSettingsApp()
     }
 
+    func requestAppManagementPermission() {
+        _ = openAppManagementSettings()
+    }
+
+    @discardableResult
+    func openAppManagementSettings() -> Bool {
+        let urls = [
+            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AppBundles",
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_AppBundles"
+        ]
+
+        for urlString in urls {
+            guard let url = URL(string: urlString) else { continue }
+            if NSWorkspace.shared.open(url) {
+                return true
+            }
+        }
+
+        return openSystemSettingsApp()
+    }
+
     private func openSystemSettingsApp() -> Bool {
         NSWorkspace.shared.openApplication(
             at: URL(fileURLWithPath: "/System/Applications/System Settings.app"),

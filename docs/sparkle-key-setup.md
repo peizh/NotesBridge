@@ -8,9 +8,9 @@ NotesBridge currently embeds this Sparkle public key in the app bundle:
 
 `bN0AdWyNntmdvuNQNXa2pDP8peMGNfsbBcrXIBf60ys=`
 
-That value is currently sourced from:
+That value is currently sourced by the bundle build path, exposed through:
 
-- [/Users/petepei/Projects/Notes/scripts/build-app-bundle.sh](/Users/petepei/Projects/Notes/scripts/build-app-bundle.sh)
+- [/Users/petepei/Projects/Notes/scripts/notesbridge.sh](/Users/petepei/Projects/Notes/scripts/notesbridge.sh)
 
 The GitHub Actions release workflow expects the matching private key in this repository secret:
 
@@ -93,9 +93,9 @@ Then also store it in a password manager or other secure backup.
 
 ## Update NotesBridge To Use The New Public Key
 
-Replace the default public key in:
+Replace the default public key in the bundle build path:
 
-- [/Users/petepei/Projects/Notes/scripts/build-app-bundle.sh](/Users/petepei/Projects/Notes/scripts/build-app-bundle.sh)
+- [/Users/petepei/Projects/Notes/scripts/notesbridge.sh](/Users/petepei/Projects/Notes/scripts/notesbridge.sh)
 
 Update this line:
 
@@ -124,7 +124,11 @@ gh secret list
 After updating the embedded public key and setting the private-key secret:
 
 1. build and release a new NotesBridge version, for example `0.2.5`
-2. run the `Release` workflow
+2. run the `Release` workflow, or the local unified command:
+
+```bash
+./scripts/notesbridge.sh release --version 0.2.5
+```
 3. confirm the workflow completes these steps:
    - `Generate Sparkle appcast`
    - `Publish GitHub Pages content`

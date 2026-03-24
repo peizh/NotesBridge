@@ -267,6 +267,14 @@ final class AppModel: ObservableObject {
         updateState.automaticallyDownloadsUpdates
     }
 
+    var appManagementPermissionLabel: String {
+        t("Recommended")
+    }
+
+    var appManagementPermissionSummary: String {
+        t("Enable App Management for NotesBridge to let direct-download updates replace the installed app automatically.")
+    }
+
     var syncedNoteCount: Int {
         syncIndex.records.count
     }
@@ -463,6 +471,15 @@ final class AppModel: ObservableObject {
 
     func openInputMonitoringSettings() {
         permissionsManager.openInputMonitoringSettings()
+    }
+
+    func requestAppManagementPermission() {
+        statusMessage = t("Open Privacy & Security > App Management and enable NotesBridge so direct-download updates can replace the installed app.")
+        permissionsManager.requestAppManagementPermission()
+    }
+
+    func openAppManagementSettings() {
+        permissionsManager.openAppManagementSettings()
     }
 
     func relaunchAsBundledApp(requestInputMonitoringOnLaunch: Bool = false) {

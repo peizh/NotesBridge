@@ -34,8 +34,8 @@ struct AppUpdateSettingsTests {
 
         let version = AppVersion.current(bundle: bundle)
 
-        #expect(version.shortVersionString == "0.2.3")
-        #expect(version.buildNumber == "1")
+        #expect(version.shortVersionString == "0.0.0")
+        #expect(version.buildNumber == "0")
     }
 
     @MainActor

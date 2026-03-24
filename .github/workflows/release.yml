@@ -56,7 +56,7 @@ jobs:
         shell: bash
         run: |
           NOTES_PATH="$RUNNER_TEMP/NotesBridge-${{ steps.meta.outputs.version }}-macOS.md"
-          ./scripts/release-notes-from-changelog.sh "${{ steps.meta.outputs.version }}" > "$NOTES_PATH"
+          ./scripts/notesbridge.sh release-notes "${{ steps.meta.outputs.version }}" > "$NOTES_PATH"
           echo "path=$NOTES_PATH" >> "$GITHUB_OUTPUT"
 
       - name: Import signing certificate
@@ -102,7 +102,7 @@ jobs:
             export NOTESBRIDGE_SIGN_IDENTITY="-"
             export NOTESBRIDGE_TEAM_ID=""
           fi
-          ./scripts/build-release-app.sh
+          ./scripts/notesbridge.sh release
 
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4
@@ -165,7 +165,7 @@ jobs:
           SPARKLE_PRIVATE_ED_KEY: ${{ secrets.SPARKLE_PRIVATE_ED_KEY }}
         shell: bash
         run: |
-          ./scripts/publish-sparkle-appcast.sh \
+          ./scripts/notesbridge.sh appcast \
             --version "${{ steps.meta.outputs.version }}" \
             --archive "dist/NotesBridge-${{ steps.meta.outputs.version }}-macOS.zip" \
             --release-notes "${{ steps.notes.outputs.path }}" \
