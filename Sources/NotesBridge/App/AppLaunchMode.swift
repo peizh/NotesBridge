@@ -277,6 +277,42 @@ private struct UITestAppleNotesSyncDataSource: AppleNotesSyncDataSourcing {
         UITestFixtures.folders
     }
 
+    func loadManifest(fromDataFolder path: String) throws -> AppleNotesSyncManifest {
+        AppleNotesSyncManifest(
+            folders: UITestFixtures.folders,
+            entries: UITestFixtures.documents.map { document in
+                AppleNotesSyncManifestEntry(
+                    databaseNoteID: document.databaseNoteID,
+                    sourceNoteIdentifier: document.sourceNoteIdentifierRaw,
+                    folderDatabaseID: document.folderDatabaseID,
+                    name: document.name,
+                    folder: document.folder,
+                    folderPath: document.folderPath,
+                    updatedAt: document.updatedAt,
+                    passwordProtected: document.passwordProtected,
+                    trashed: false
+                )
+            },
+            skippedLockedNotes: 0,
+            skippedLockedNotesByFolder: [:],
+            sourceDiagnostics: nil,
+            selectedDatabaseRelativePath: "NoteStore.sqlite"
+        )
+    }
+
+    func loadDocuments(
+        fromDataFolder path: String,
+        noteIDs: Set<Int64>,
+        preferredDatabaseRelativePath: String?
+    ) throws -> AppleNotesSyncSnapshot {
+        AppleNotesSyncSnapshot(
+            folders: UITestFixtures.folders,
+            documents: UITestFixtures.documents.filter { noteIDs.contains($0.databaseNoteID) },
+            skippedLockedNotes: 0,
+            skippedLockedNotesByFolder: [:]
+        )
+    }
+
     func loadSnapshot(fromDataFolder path: String) throws -> AppleNotesSyncSnapshot {
         AppleNotesSyncSnapshot(
             folders: UITestFixtures.folders,

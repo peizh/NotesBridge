@@ -6,6 +6,12 @@ protocol AppleNotesSyncDataSourcing: Sendable {
     func validateDataFolder(at path: String) throws -> AppleNotesDataFolderSelection
     func inspectDataFolder(at path: String) -> AppleNotesDataFolderAccessStatus
     func fetchFolders(fromDataFolder path: String) throws -> [AppleNotesFolder]
+    func loadManifest(fromDataFolder path: String) throws -> AppleNotesSyncManifest
+    func loadDocuments(
+        fromDataFolder path: String,
+        noteIDs: Set<Int64>,
+        preferredDatabaseRelativePath: String?
+    ) throws -> AppleNotesSyncSnapshot
     func loadSnapshot(fromDataFolder path: String) throws -> AppleNotesSyncSnapshot
 }
 
@@ -93,6 +99,18 @@ struct AppleNotesDatabaseSyncSource: AppleNotesSyncDataSourcing {
         self.decoder = decoder
         self.renderer = renderer
         self.mergeableDataDecoder = mergeableDataDecoder
+    }
+
+    func manifestSelectSQL(columns: [String]) -> String {
+        """
+        SELECT
+            \(joinedSelectClause(columns))
+        FROM ziccloudsyncingobject AS n
+        JOIN zicnotedata AS nd ON nd.znote = n.z_pk
+        WHERE n.z_ent = ?
+          AND nd.zdata IS NOT NULL
+        ORDER BY title COLLATE NOCASE
+        """
     }
 
     func validateDataFolder(at path: String) throws -> AppleNotesDataFolderSelection {
@@ -208,6 +226,177 @@ struct AppleNotesDatabaseSyncSource: AppleNotesSyncDataSourcing {
         return bestSummaries
     }
 
+    func loadManifest(fromDataFolder path: String) throws -> AppleNotesSyncManifest {
+        AppLog.appleNotes.info("Loading Apple Notes manifest from data folder: \(path, privacy: .public)")
+        let selection = try validateDataFolder(at: path)
+        let candidateScan = databaseCandidateReport(rootURL: selection.rootURL)
+        var bestManifest: AppleNotesSyncManifest?
+        var bestCandidateURL: URL?
+        var bestVisibleEntryCount = -1
+        var bestTotalEntryCount = -1
+        var candidateReports: [AppleNotesDatabaseCandidateReport] = []
+
+        for candidateURL in candidateScan.candidateURLs {
+            let candidateSelection = AppleNotesDataFolderSelection(
+                rootURL: selection.rootURL,
+                databaseURL: candidateURL
+            )
+            let candidateResult = try withDatabaseSnapshot(from: candidateSelection) { database, schema in
+                let folderContext = try loadFolderContext(database: database, schema: schema)
+                let noteTitleColumn = try schema.preferredTextColumn(
+                    database: database,
+                    entityID: try schema.entityID(named: "ICNote"),
+                    preferredColumns: ["ztitle1", "ztitle"],
+                    prefixes: ["ztitle"]
+                )
+                let manifest = try loadManifest(
+                    database: database,
+                    schema: schema,
+                    folderContext: folderContext,
+                    noteTitleColumn: noteTitleColumn
+                )
+                let visibleEntryCount = manifest.entries.filter { !$0.passwordProtected && !$0.trashed }.count
+                let report = AppleNotesDatabaseCandidateReport(
+                    rootURL: selection.rootURL,
+                    databaseURL: candidateURL,
+                    folderCount: manifest.folders.count,
+                    totalNoteCount: manifest.entries.count,
+                    documentCount: visibleEntryCount,
+                    skippedLockedNotes: manifest.skippedLockedNotes,
+                    folderTitleColumn: folderContext.folderTitleColumn,
+                    noteTitleColumn: noteTitleColumn,
+                    noteFolderColumn: folderContext.noteFolderColumn,
+                    folderReferenceStats: []
+                )
+                return (manifest, report, visibleEntryCount)
+            }
+
+            let manifest = candidateResult.0
+            let report = candidateResult.1
+            let visibleEntryCount = candidateResult.2
+            let totalEntryCount = manifest.entries.count
+            candidateReports.append(report)
+            AppLog.appleNotes.debug("Candidate manifest report: \(report.summary, privacy: .public)")
+            if visibleEntryCount > bestVisibleEntryCount
+                || (visibleEntryCount == bestVisibleEntryCount && totalEntryCount > bestTotalEntryCount)
+            {
+                bestManifest = manifest
+                bestCandidateURL = candidateURL
+                bestVisibleEntryCount = visibleEntryCount
+                bestTotalEntryCount = totalEntryCount
+            }
+        }
+
+        guard var bestManifest else {
+            throw AppleNotesSyncDataSourceError.noteStoreNotFound
+        }
+
+        bestManifest.sourceDiagnostics = candidateReports.map(\.summary).joined(separator: " | ")
+        bestManifest.selectedDatabaseRelativePath = bestCandidateURL.map {
+            databaseRelativePath(rootURL: selection.rootURL, databaseURL: $0)
+        }
+        return bestManifest
+    }
+
+    func loadDocuments(
+        fromDataFolder path: String,
+        noteIDs: Set<Int64>,
+        preferredDatabaseRelativePath: String? = nil
+    ) throws -> AppleNotesSyncSnapshot {
+        AppLog.appleNotes.info("Loading \(noteIDs.count) Apple Notes document(s) from data folder: \(path, privacy: .public)")
+        guard !noteIDs.isEmpty else {
+            let manifest = try loadManifest(fromDataFolder: path)
+            return AppleNotesSyncSnapshot(
+                folders: manifest.folders,
+                documents: [],
+                skippedLockedNotes: manifest.skippedLockedNotes,
+                skippedLockedNotesByFolder: manifest.skippedLockedNotesByFolder,
+                sourceDiagnostics: manifest.sourceDiagnostics
+            )
+        }
+
+        let selection = try validateDataFolder(at: path)
+        let candidateScan = databaseCandidateReport(rootURL: selection.rootURL)
+        let candidateURLs = targetedLoadCandidateURLs(
+            rootURL: selection.rootURL,
+            candidateScan: candidateScan,
+            preferredDatabaseRelativePath: preferredDatabaseRelativePath
+        )
+        var bestSnapshot: AppleNotesSyncSnapshot?
+        var bestDocumentCount = -1
+        var candidateReports: [AppleNotesDatabaseCandidateReport] = []
+
+        for candidateURL in candidateURLs {
+            let candidateSelection = AppleNotesDataFolderSelection(
+                rootURL: selection.rootURL,
+                databaseURL: candidateURL
+            )
+            let candidateResult = try withDatabaseSnapshot(from: candidateSelection) { database, schema in
+                let folderContext = try loadFolderContext(database: database, schema: schema)
+                let noteTitleColumn = try schema.preferredTextColumn(
+                    database: database,
+                    entityID: try schema.entityID(named: "ICNote"),
+                    preferredColumns: ["ztitle1", "ztitle"],
+                    prefixes: ["ztitle"]
+                )
+                let noteReferenceMap = try loadNoteReferenceMap(
+                    database: database,
+                    schema: schema,
+                    noteTitleColumn: noteTitleColumn
+                )
+                let documentsResult = try loadDocuments(
+                    database: database,
+                    schema: schema,
+                    selection: candidateSelection,
+                    folderContext: folderContext,
+                    noteReferenceMap: noteReferenceMap,
+                    noteTitleColumn: noteTitleColumn,
+                    noteIDs: noteIDs
+                )
+
+                let snapshot = AppleNotesSyncSnapshot(
+                    folders: folderContext.summaries,
+                    documents: documentsResult.documents,
+                    skippedLockedNotes: documentsResult.skippedLockedNotes,
+                    skippedLockedNotesByFolder: documentsResult.skippedLockedNotesByFolder,
+                    failedTableDecodes: documentsResult.failedTableDecodes,
+                    failedScanDecodes: documentsResult.failedScanDecodes,
+                    partialScanPageFailures: documentsResult.partialScanPageFailures,
+                    sourceDiagnostics: nil
+                )
+                let report = AppleNotesDatabaseCandidateReport(
+                    rootURL: selection.rootURL,
+                    databaseURL: candidateURL,
+                    folderCount: snapshot.folders.count,
+                    totalNoteCount: folderContext.summaries.reduce(0) { $0 + $1.noteCount },
+                    documentCount: snapshot.documents.count,
+                    skippedLockedNotes: snapshot.skippedLockedNotes,
+                    folderTitleColumn: folderContext.folderTitleColumn,
+                    noteTitleColumn: noteTitleColumn,
+                    noteFolderColumn: folderContext.noteFolderColumn,
+                    folderReferenceStats: documentsResult.folderReferenceStats
+                )
+                return (snapshot, report)
+            }
+
+            let snapshot = candidateResult.0
+            let report = candidateResult.1
+            candidateReports.append(report)
+            AppLog.appleNotes.debug("Candidate targeted document report: \(report.summary, privacy: .public)")
+            if snapshot.documents.count > bestDocumentCount {
+                bestSnapshot = snapshot
+                bestDocumentCount = snapshot.documents.count
+            }
+        }
+
+        guard var bestSnapshot else {
+            throw AppleNotesSyncDataSourceError.noteStoreNotFound
+        }
+
+        bestSnapshot.sourceDiagnostics = candidateReports.map(\.summary).joined(separator: " | ")
+        return bestSnapshot
+    }
+
     func loadSnapshot(fromDataFolder path: String) throws -> AppleNotesSyncSnapshot {
         AppLog.appleNotes.info("Loading Apple Notes snapshot from data folder: \(path, privacy: .public)")
         let selection = try validateDataFolder(at: path)
@@ -241,7 +430,8 @@ struct AppleNotesDatabaseSyncSource: AppleNotesSyncDataSourcing {
                     selection: candidateSelection,
                     folderContext: folderContext,
                     noteReferenceMap: noteReferenceMap,
-                    noteTitleColumn: noteTitleColumn
+                    noteTitleColumn: noteTitleColumn,
+                    noteIDs: nil
                 )
 
                 let snapshot = AppleNotesSyncSnapshot(
@@ -338,7 +528,9 @@ extension AppleNotesDatabaseSyncSource {
         try fileManager.createDirectory(at: rootDirectory, withIntermediateDirectories: true)
         return rootDirectory
     }
+}
 
+private extension AppleNotesDatabaseSyncSource {
     func makeSnapshotDirectory(fileManager: FileManager = .default) throws -> URL {
         let snapshotDirectory = try snapshotRootDirectory(fileManager: fileManager)
             .appendingPathComponent("NotesBridge-\(UUID().uuidString)", isDirectory: true)
@@ -354,9 +546,7 @@ extension AppleNotesDatabaseSyncSource {
         }
         return snapshotDirectory
     }
-}
-
-private extension AppleNotesDatabaseSyncSource {
+    
     func inspectionCandidateReports(
         rootURL: URL,
         candidateScan: AppleNotesDatabaseCandidateScan
@@ -391,7 +581,8 @@ private extension AppleNotesDatabaseSyncSource {
                     selection: selection,
                     folderContext: folderContext,
                     noteReferenceMap: noteReferenceMap,
-                    noteTitleColumn: noteTitleColumn
+                    noteTitleColumn: noteTitleColumn,
+                    noteIDs: nil
                 )
 
                 return AppleNotesDatabaseCandidateReport(
@@ -414,6 +605,35 @@ private extension AppleNotesDatabaseSyncSource {
             )
             return []
         }
+    }
+
+    func targetedLoadCandidateURLs(
+        rootURL: URL,
+        candidateScan: AppleNotesDatabaseCandidateScan,
+        preferredDatabaseRelativePath: String?
+    ) -> [URL] {
+        guard let preferredDatabaseRelativePath,
+              !preferredDatabaseRelativePath.isEmpty
+        else {
+            return candidateScan.candidateURLs
+        }
+
+        let preferredURL = rootURL.appendingPathComponent(preferredDatabaseRelativePath, isDirectory: false)
+        if candidateScan.candidateURLs.contains(preferredURL) {
+            AppLog.appleNotes.info(
+                "Using manifest-selected Apple Notes database for targeted load: \(preferredDatabaseRelativePath, privacy: .public)"
+            )
+            return [preferredURL]
+        }
+
+        AppLog.appleNotes.warning(
+            "Manifest-selected Apple Notes database is no longer visible for targeted load: \(preferredDatabaseRelativePath, privacy: .public). Falling back to all candidates."
+        )
+        return candidateScan.candidateURLs
+    }
+
+    func databaseRelativePath(rootURL: URL, databaseURL: URL) -> String {
+        databaseURL.path.replacingOccurrences(of: rootURL.path + "/", with: "")
     }
 
     func databaseCandidateReport(rootURL: URL) -> AppleNotesDatabaseCandidateScan {
@@ -834,7 +1054,8 @@ private extension AppleNotesDatabaseSyncSource {
         selection: AppleNotesDataFolderSelection,
         folderContext: AppleNotesFolderContext,
         noteReferenceMap: [String: AppleNotesResolvedNoteReference],
-        noteTitleColumn: String?
+        noteTitleColumn: String?,
+        noteIDs: Set<Int64>?
     ) throws -> AppleNotesDocumentLoadResult {
         let noteFolderReferenceColumns = schema.presentColumns(["zfolder", "zcontainer", "zparent"])
         let noteFolderExpressions = noteFolderReferenceColumns.enumerated().map { index, column in
@@ -847,6 +1068,10 @@ private extension AppleNotesDatabaseSyncSource {
                 noteFolderExpressions: noteFolderExpressions
             )
         )
+        let noteIDBindings = noteIDs?.sorted().map(SQLiteBinding.int) ?? []
+        let noteIDFilterClause = noteIDBindings.isEmpty
+            ? ""
+            : " AND n.z_pk IN (\(Array(repeating: "?", count: noteIDBindings.count).joined(separator: ", ")))"
         let rows = try database.rows(
             """
             SELECT
@@ -854,9 +1079,10 @@ private extension AppleNotesDatabaseSyncSource {
             FROM zicnotedata AS nd
             JOIN ziccloudsyncingobject AS n ON n.z_pk = nd.znote
             WHERE n.z_ent = ?
+            \(noteIDFilterClause)
             ORDER BY title COLLATE NOCASE
             """,
-            bindings: [.int(schema.entityID(named: "ICNote"))]
+            bindings: [.int(schema.entityID(named: "ICNote"))] + noteIDBindings
         )
 
         var documents: [AppleNotesSyncDocument] = []
@@ -953,6 +1179,84 @@ private extension AppleNotesDatabaseSyncSource {
             failedTableDecodes: renderDiagnostics.failedTableDecodes,
             failedScanDecodes: renderDiagnostics.failedScanDecodes,
             partialScanPageFailures: renderDiagnostics.partialScanPageFailures
+        )
+    }
+
+    func loadManifest(
+        database: SQLiteDatabase,
+        schema: AppleNotesDatabaseSchema,
+        folderContext: AppleNotesFolderContext,
+        noteTitleColumn: String?
+    ) throws -> AppleNotesSyncManifest {
+        let noteFolderReferenceColumns = schema.presentColumns(["zfolder", "zcontainer", "zparent"])
+        let noteFolderExpressions = noteFolderReferenceColumns.enumerated().map { index, column in
+            schema.columnExpression(column, tableAlias: "n", alias: "folderRef\(index)")
+        }
+        var columns = [
+            "n.z_pk AS pk",
+            schema.columnExpression("zidentifier", tableAlias: "n", alias: "sourceIdentifier", defaultValue: "''"),
+            schema.selectedColumnExpression(noteTitleColumn, tableAlias: "n", alias: "title", defaultValue: "''"),
+        ]
+        columns.append(contentsOf: noteFolderExpressions)
+        columns.append(contentsOf: [
+            schema.columnExpression("zmodificationdate1", tableAlias: "n", alias: "updatedAt"),
+            schema.columnExpression("zispasswordprotected", tableAlias: "n", alias: "passwordProtected", defaultValue: "0"),
+        ])
+        let rows = try database.rows(
+            manifestSelectSQL(columns: columns),
+            bindings: [.int(schema.entityID(named: "ICNote"))]
+        )
+
+        var entries: [AppleNotesSyncManifestEntry] = []
+        var skippedLockedNotes = 0
+        var skippedLockedNotesByFolder: [String: Int] = [:]
+
+        for row in rows {
+            guard let noteID = row.int("pk") else {
+                continue
+            }
+
+            let folderDatabaseID = resolvedFolderDatabaseID(
+                in: row,
+                candidateColumnCount: noteFolderReferenceColumns.count,
+                knownFolders: folderContext.foldersByID
+            )
+            let folderSummary = folderDatabaseID
+                .flatMap { folderContext.summariesByDatabaseID[$0] }
+            let folderName = folderSummary?.displayName ?? "Notes"
+            let folderPath = folderSummary?.exportRelativePath
+            let isTrashed = folderDatabaseID
+                .flatMap { folderContext.foldersByID[$0] }
+                .map { $0.folderType == AppleNotesFolderType.trash.rawValue }
+                ?? false
+            let isPasswordProtected = row.bool("passwordProtected")
+
+            if isPasswordProtected {
+                skippedLockedNotes += 1
+                skippedLockedNotesByFolder[folderPath ?? folderName, default: 0] += 1
+            }
+
+            entries.append(
+                AppleNotesSyncManifestEntry(
+                    databaseNoteID: noteID,
+                    sourceNoteIdentifier: row.string("sourceIdentifier"),
+                    folderDatabaseID: folderDatabaseID,
+                    name: row.string("title")?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+                    folder: folderName,
+                    folderPath: folderPath,
+                    updatedAt: decodeAppleNotesTime(row.double("updatedAt")),
+                    passwordProtected: isPasswordProtected,
+                    trashed: isTrashed
+                )
+            )
+        }
+
+        return AppleNotesSyncManifest(
+            folders: folderContext.summaries,
+            entries: entries,
+            skippedLockedNotes: skippedLockedNotes,
+            skippedLockedNotesByFolder: skippedLockedNotesByFolder,
+            sourceDiagnostics: nil
         )
     }
 

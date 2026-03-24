@@ -19,7 +19,7 @@ struct MenuBarContentView: View {
                 statusRow(title: appModel.t("Inline"), value: appModel.inlineEnhancementsSummary)
                 statusRow(title: appModel.t("Slash"), value: appModel.slashCommandsSummary)
                 statusRow(title: appModel.t("Selection"), value: appModel.selectionSummary)
-                statusRow(title: appModel.t("Sync"), value: appModel.tf("Last full sync: %@", appModel.lastFullSyncLabel))
+                statusRow(title: appModel.t("Sync"), value: appModel.tf("Last sync: %@", appModel.lastSyncLabel))
             }
 
             Divider()
@@ -33,11 +33,11 @@ struct MenuBarContentView: View {
 
                 Button {
                     Task {
-                        await appModel.syncAllNotes()
+                        await appModel.syncChangedNotes()
                     }
                 } label: {
                     Label(
-                        appModel.isSyncing ? appModel.t("Syncing Notes...") : appModel.t("Sync All Notes to Obsidian"),
+                        appModel.isSyncing ? appModel.t("Syncing Notes...") : appModel.t("Sync Changed Notes"),
                         systemImage: "arrow.triangle.2.circlepath"
                     )
                 }

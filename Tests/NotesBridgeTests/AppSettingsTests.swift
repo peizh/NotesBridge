@@ -11,6 +11,8 @@ struct AppSettingsTests {
         #expect(settings.inlineToolbarItems.filter(\.isVisible).map(\.command) == InlineToolbarItemSetting.defaultVisibleCommands)
         #expect(settings.slashCommandItems.count == SlashCommandItemSetting.defaultOrder.count)
         #expect(settings.slashCommandItems.filter(\.isVisible).map(\.command) == SlashCommandItemSetting.defaultVisibleCommands)
+        #expect(settings.automaticSyncEnabled == false)
+        #expect(settings.automaticSyncInterval == .thirtyMinutes)
     }
 
     @Test
@@ -34,6 +36,47 @@ struct AppSettingsTests {
 
         #expect(decoded.inlineToolbarItems == InlineToolbarItemSetting.default)
         #expect(decoded.slashCommandItems == SlashCommandItemSetting.default)
+        #expect(decoded.automaticSyncEnabled == false)
+        #expect(decoded.automaticSyncInterval == .thirtyMinutes)
+    }
+
+    @Test
+    func decodingLegacyAutomaticSyncIntervalsMapsToThirtyMinutes() throws {
+        let fiveMinuteData = """
+        {
+          "appLanguage": "system",
+          "enableInlineEnhancements": true,
+          "enableFormattingBar": true,
+          "enableMarkdownTriggers": true,
+          "enableSlashCommands": true,
+          "syncDirection": "appleNotesToObsidian",
+          "exportFolderName": "Apple Notes",
+          "attachmentFolderName": "_attachments",
+          "useObsidianAttachmentFolder": false,
+          "automaticSyncInterval": 5
+        }
+        """.data(using: .utf8)!
+
+        let fifteenMinuteData = """
+        {
+          "appLanguage": "system",
+          "enableInlineEnhancements": true,
+          "enableFormattingBar": true,
+          "enableMarkdownTriggers": true,
+          "enableSlashCommands": true,
+          "syncDirection": "appleNotesToObsidian",
+          "exportFolderName": "Apple Notes",
+          "attachmentFolderName": "_attachments",
+          "useObsidianAttachmentFolder": false,
+          "automaticSyncInterval": 15
+        }
+        """.data(using: .utf8)!
+
+        let fiveMinuteDecoded = try JSONDecoder().decode(AppSettings.self, from: fiveMinuteData)
+        let fifteenMinuteDecoded = try JSONDecoder().decode(AppSettings.self, from: fifteenMinuteData)
+
+        #expect(fiveMinuteDecoded.automaticSyncInterval == .thirtyMinutes)
+        #expect(fifteenMinuteDecoded.automaticSyncInterval == .thirtyMinutes)
     }
 
     @Test

@@ -273,9 +273,33 @@ struct SettingsView: View {
                     LabeledContent(appModel.t("Indexed Notes")) {
                         Text("\(appModel.syncedNoteCount)")
                     }
+                    LabeledContent(appModel.t("Last Sync")) {
+                        Text(appModel.lastSyncLabel)
+                    }
                     LabeledContent(appModel.t("Last Full Sync")) {
                         Text(appModel.lastFullSyncLabel)
                     }
+
+                    Toggle(
+                        appModel.t("Enable Automatic Sync"),
+                        isOn: Binding(
+                            get: { appModel.settings.automaticSyncEnabled },
+                            set: { appModel.settings.automaticSyncEnabled = $0 }
+                        )
+                    )
+
+                    Picker(
+                        appModel.t("Automatic Sync Interval"),
+                        selection: Binding(
+                            get: { appModel.settings.automaticSyncInterval },
+                            set: { appModel.settings.automaticSyncInterval = $0 }
+                        )
+                    ) {
+                        ForEach(AutomaticSyncInterval.allCases) { interval in
+                            Text(appModel.t(interval.displayKey)).tag(interval)
+                        }
+                    }
+                    .disabled(!appModel.settings.automaticSyncEnabled)
 
                     HStack {
                         Button(appModel.t("Refresh Folder Index")) {
@@ -286,13 +310,21 @@ struct SettingsView: View {
                         .disabled(appModel.isRefreshingFolders)
                         .accessibilityIdentifier("settings.refreshFolders")
 
-                        Button(appModel.isSyncing ? appModel.t("Syncing...") : appModel.t("Sync All Notes to Obsidian")) {
+                        Button(appModel.isSyncing ? appModel.t("Syncing...") : appModel.t("Sync Changed Notes")) {
                             Task {
-                                await appModel.syncAllNotes()
+                                await appModel.syncChangedNotes()
                             }
                         }
                         .disabled(!appModel.hasVaultConfigured || appModel.isSyncing)
                         .accessibilityIdentifier("settings.syncAllNotes")
+
+                        Button(appModel.t("Run Full Sync")) {
+                            Task {
+                                await appModel.runFullSync()
+                            }
+                        }
+                        .disabled(!appModel.hasVaultConfigured || appModel.isSyncing)
+                        .accessibilityIdentifier("settings.runFullSync")
                     }
                 }
 
