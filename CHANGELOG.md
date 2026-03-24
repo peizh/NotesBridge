@@ -4,6 +4,24 @@ All notable user-visible changes to NotesBridge should be documented here.
 
 This file is the source of truth for GitHub Release notes and Sparkle update notes.
 
+## [0.2.5] - 2026-03-24
+
+### Fixed
+
+- Fixed the direct-download update pipeline by rotating the Sparkle signing key and restoring GitHub Pages appcast publishing.
+- Fixed release automation so Sparkle framework lookup and release-note extraction succeed on clean CI runners.
+
+### Important
+
+- NotesBridge `0.2.2` to `0.2.4` were built with the previous Sparkle public key and cannot automatically upgrade to this release.
+- Users on those versions need to manually install `0.2.5` once. After that, in-app updates can work again.
+
+### Distribution
+
+- Direct-download build.
+- Ad-hoc signed.
+- Not notarized yet.
+
 ## [0.2.4] - 2026-03-24
 
 ### Added
