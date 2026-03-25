@@ -123,6 +123,44 @@ Usage: $0 release-notes VERSION
 EOF
 }
 
+stop_running_app_bundle_processes() {
+    local app_bundle_path="$1"
+    local app_name="$2"
+    local executable_path="$app_bundle_path/Contents/MacOS/$app_name"
+    local running_pids
+    running_pids="$(pgrep -f "$executable_path" || true)"
+
+    if [[ -z "${running_pids:-}" ]]; then
+        return
+    fi
+
+    echo "Stopping existing $app_name process(es)..."
+    while IFS= read -r pid; do
+        [[ -z "$pid" ]] && continue
+        kill "$pid" 2>/dev/null || true
+    done <<< "$running_pids"
+
+    local deadline=$((SECONDS + 5))
+    while true; do
+        local remaining_pids
+        remaining_pids="$(pgrep -f "$executable_path" || true)"
+        if [[ -z "${remaining_pids:-}" ]]; then
+            return
+        fi
+
+        if (( SECONDS >= deadline )); then
+            echo "Force stopping remaining $app_name process(es)..."
+            while IFS= read -r pid; do
+                [[ -z "$pid" ]] && continue
+                kill -9 "$pid" 2>/dev/null || true
+            done <<< "$remaining_pids"
+            return
+        fi
+
+        sleep 0.2
+    done
+}
+
 run_dev_command() {
     local build_config="debug"
     local build_only=0
@@ -171,6 +209,7 @@ run_dev_command() {
     fi
 
     echo "Launching bundled app..."
+    stop_running_app_bundle_processes "$app_bundle_path" "NotesBridge"
     open -n "$app_bundle_path"
 }
 
@@ -435,6 +474,7 @@ PLIST
     echo "  sparkle_feed_url=$sparkle_feed_url"
 
     if [[ "$launch_after_build" -eq 1 ]]; then
+        stop_running_app_bundle_processes "$app_bundle_path" "$app_name"
         open -n "$app_bundle_path"
     fi
 }
