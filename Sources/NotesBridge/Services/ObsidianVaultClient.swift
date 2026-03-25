@@ -598,30 +598,54 @@ struct ObsidianVaultClient: Sendable {
     }
 
     private func existingUpdatedAtValue(in contents: String?) -> String? {
-        guard let contents else {
-            return nil
-        }
-
-        let pattern = #"\nupdated_at: "([^"]*)""#
-        guard let regex = try? NSRegularExpression(pattern: pattern) else {
-            return nil
-        }
-        let range = NSRange(contents.startIndex..., in: contents)
-        guard let match = regex.firstMatch(in: contents, range: range),
-              let valueRange = Range(match.range(at: 1), in: contents)
+        guard let contents,
+              let frontMatterRange = frontMatterRange(in: contents)
         else {
             return nil
         }
 
-        return String(contents[valueRange])
+        let frontMatter = String(contents[frontMatterRange])
+        let pattern = #"(?m)^updated_at: "([^"]*)"$"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else {
+            return nil
+        }
+        let range = NSRange(frontMatter.startIndex..., in: frontMatter)
+        guard let match = regex.firstMatch(in: frontMatter, range: range),
+              let valueRange = Range(match.range(at: 1), in: frontMatter)
+        else {
+            return nil
+        }
+
+        return String(frontMatter[valueRange])
     }
 
     private func normalizedUpdatedAtContents(in contents: String) -> String {
-        contents.replacingOccurrences(
-            of: #"updated_at: "[^"]*""#,
+        guard let frontMatterRange = frontMatterRange(in: contents) else {
+            return contents
+        }
+
+        let frontMatter = String(contents[frontMatterRange])
+        let normalizedFrontMatter = frontMatter.replacingOccurrences(
+            of: #"(?m)^updated_at: "[^"]*"$"#,
             with: #"updated_at: "\#(Self.updatedAtPlaceholder)""#,
             options: .regularExpression
         )
+
+        return contents.replacingCharacters(in: frontMatterRange, with: normalizedFrontMatter)
+    }
+
+    private func frontMatterRange(in contents: String) -> Range<String.Index>? {
+        let openingDelimiter = "---\n"
+        guard contents.hasPrefix(openingDelimiter),
+              let closingRange = contents.range(
+                  of: "\n---\n",
+                  range: contents.index(contents.startIndex, offsetBy: openingDelimiter.count)..<contents.endIndex
+              )
+        else {
+            return nil
+        }
+
+        return contents.startIndex..<closingRange.upperBound
     }
 
     private func attachmentDirectoryURL(

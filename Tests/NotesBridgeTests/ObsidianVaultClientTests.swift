@@ -287,6 +287,59 @@ struct ObsidianVaultClientTests {
     }
 
     @Test
+    func unchangedReexportIgnoresUpdatedAtLookingTextInMarkdownBody() throws {
+        let vaultURL = try makeTemporaryVault()
+        defer { try? FileManager.default.removeItem(at: vaultURL) }
+
+        var settings = AppSettings.default
+        settings.vaultPath = vaultURL.path
+
+        let firstExportTime = date(1_000)
+        let secondExportTime = date(2_000)
+        let firstClient = ObsidianVaultClient(currentDateProvider: { firstExportTime })
+        let secondClient = ObsidianVaultClient(currentDateProvider: { secondExportTime })
+        let markdownBody = """
+        Body
+
+        updated_at: "this stays in the body"
+        """
+
+        let note = AppleNotesSyncDocument(
+            databaseNoteID: 104,
+            name: "Body Timestamp Marker",
+            folder: "Inbox",
+            createdAt: nil,
+            updatedAt: date(750),
+            shared: false,
+            passwordProtected: false,
+            markdownTemplate: markdownBody,
+            attachments: []
+        )
+
+        let firstExport = try firstClient.export(note: note, settings: settings, existingRelativePath: nil)
+        let secondExport = try secondClient.export(
+            note: AppleNotesSyncDocument(
+                databaseNoteID: 104,
+                name: "Body Timestamp Marker",
+                folder: "Inbox",
+                createdAt: nil,
+                updatedAt: date(900),
+                shared: false,
+                passwordProtected: false,
+                markdownTemplate: markdownBody,
+                attachments: []
+            ),
+            settings: settings,
+            existingRelativePath: firstExport.relativePath
+        )
+        let contents = try String(contentsOf: secondExport.fileURL, encoding: .utf8)
+
+        #expect(secondExport.changeKind == .unchanged)
+        #expect(contents.contains(#"updated_at: "this stays in the body""#))
+        #expect(try frontMatterValue(named: "updated_at", in: secondExport.fileURL) == frontMatterDateString(from: firstExportTime))
+    }
+
+    @Test
     func removingEmptyAttachmentDirectoryDoesNotCountAsUpdated() throws {
         let vaultURL = try makeTemporaryVault()
         defer { try? FileManager.default.removeItem(at: vaultURL) }
