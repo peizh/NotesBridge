@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import NotesBridge
 
@@ -176,6 +177,113 @@ struct ObsidianVaultClientTests {
 
         #expect(firstExport.changeKind == .created)
         #expect(secondExport.changeKind == .unchanged)
+    }
+
+    @Test
+    func createdAndUpdatedExportsStampUpdatedAtWithExportTime() throws {
+        let vaultURL = try makeTemporaryVault()
+        defer { try? FileManager.default.removeItem(at: vaultURL) }
+
+        var settings = AppSettings.default
+        settings.vaultPath = vaultURL.path
+
+        let createdAt = date(100)
+        let firstExportTime = date(200)
+        let secondExportTime = date(400)
+        let sourceUpdatedAt = date(300)
+
+        let firstClient = ObsidianVaultClient(currentDateProvider: { firstExportTime })
+        let secondClient = ObsidianVaultClient(currentDateProvider: { secondExportTime })
+
+        let originalNote = AppleNotesSyncDocument(
+            databaseNoteID: 102,
+            name: "Stamped Note",
+            folder: "Inbox",
+            createdAt: createdAt,
+            updatedAt: sourceUpdatedAt,
+            shared: false,
+            passwordProtected: false,
+            markdownTemplate: "Body",
+            attachments: []
+        )
+        let firstExport = try firstClient.export(
+            note: originalNote,
+            settings: settings,
+            existingRelativePath: nil
+        )
+        let firstCreatedAtValue = try frontMatterValue(named: "created_at", in: firstExport.fileURL)
+        let firstUpdatedAtValue = try frontMatterValue(named: "updated_at", in: firstExport.fileURL)
+
+        #expect(firstCreatedAtValue == frontMatterDateString(from: createdAt))
+        #expect(firstUpdatedAtValue == frontMatterDateString(from: firstExportTime))
+
+        let updatedNote = AppleNotesSyncDocument(
+            databaseNoteID: 102,
+            name: "Stamped Note",
+            folder: "Inbox",
+            createdAt: createdAt,
+            updatedAt: date(350),
+            shared: false,
+            passwordProtected: false,
+            markdownTemplate: "Body changed",
+            attachments: []
+        )
+        let secondExport = try secondClient.export(
+            note: updatedNote,
+            settings: settings,
+            existingRelativePath: firstExport.relativePath
+        )
+        let secondUpdatedAtValue = try frontMatterValue(named: "updated_at", in: secondExport.fileURL)
+
+        #expect(secondExport.changeKind == .updated)
+        #expect(secondUpdatedAtValue == frontMatterDateString(from: secondExportTime))
+    }
+
+    @Test
+    func unchangedReexportPreservesLastExportedUpdatedAt() throws {
+        let vaultURL = try makeTemporaryVault()
+        defer { try? FileManager.default.removeItem(at: vaultURL) }
+
+        var settings = AppSettings.default
+        settings.vaultPath = vaultURL.path
+
+        let firstExportTime = date(500)
+        let secondExportTime = date(900)
+        let firstClient = ObsidianVaultClient(currentDateProvider: { firstExportTime })
+        let secondClient = ObsidianVaultClient(currentDateProvider: { secondExportTime })
+
+        let note = AppleNotesSyncDocument(
+            databaseNoteID: 103,
+            name: "Stable Timestamp",
+            folder: "Inbox",
+            createdAt: nil,
+            updatedAt: date(700),
+            shared: false,
+            passwordProtected: false,
+            markdownTemplate: "Body",
+            attachments: []
+        )
+
+        let firstExport = try firstClient.export(note: note, settings: settings, existingRelativePath: nil)
+        let secondExport = try secondClient.export(
+            note: AppleNotesSyncDocument(
+                databaseNoteID: 103,
+                name: "Stable Timestamp",
+                folder: "Inbox",
+                createdAt: nil,
+                updatedAt: date(800),
+                shared: false,
+                passwordProtected: false,
+                markdownTemplate: "Body",
+                attachments: []
+            ),
+            settings: settings,
+            existingRelativePath: firstExport.relativePath
+        )
+        let preservedUpdatedAtValue = try frontMatterValue(named: "updated_at", in: secondExport.fileURL)
+
+        #expect(secondExport.changeKind == .unchanged)
+        #expect(preservedUpdatedAtValue == frontMatterDateString(from: firstExportTime))
     }
 
     @Test
@@ -671,5 +779,33 @@ struct ObsidianVaultClientTests {
         let vaultURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: vaultURL, withIntermediateDirectories: true)
         return vaultURL
+    }
+
+    private func frontMatterValue(named key: String, in fileURL: URL) throws -> String? {
+        let contents = try String(contentsOf: fileURL, encoding: .utf8)
+        let pattern = #"^\#(key): "([^"]*)"$"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.anchorsMatchLines]) else {
+            return nil
+        }
+        let range = NSRange(contents.startIndex..., in: contents)
+        guard let match = regex.firstMatch(in: contents, range: range),
+              let valueRange = Range(match.range(at: 1), in: contents)
+        else {
+            return nil
+        }
+        return String(contents[valueRange])
+    }
+
+    private func date(_ seconds: TimeInterval) -> Date {
+        Date(timeIntervalSince1970: seconds)
+    }
+
+    private func frontMatterDateString(from date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .autoupdatingCurrent
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return formatter.string(from: date)
     }
 }

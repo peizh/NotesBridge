@@ -3,7 +3,9 @@ import Combine
 import Foundation
 import OSLog
 
-private struct AppleNotesDataFolderAccessSession {
+typealias AppleNotesDataFolderAccessSessionFactory = @Sendable (String?, Data?) -> AppleNotesDataFolderAccessSession?
+
+struct AppleNotesDataFolderAccessSession {
     let url: URL
     private let stopAccessingImpl: @Sendable () -> Void
 
@@ -17,7 +19,7 @@ private struct AppleNotesDataFolderAccessSession {
     }
 }
 
-private func makeAppleNotesDataFolderAccessSession(
+func makeAppleNotesDataFolderAccessSession(
     path: String?,
     bookmarkData: Data?
 ) -> AppleNotesDataFolderAccessSession? {
@@ -126,10 +128,12 @@ final class AppModel: ObservableObject {
     private let slashCommandEngine: SlashCommandEngine
     private let formattingBarController: FloatingFormattingBarController
     private let statusObserver: (@MainActor @Sendable (String) -> Void)?
+    private let appleNotesDataFolderAccessSessionFactory: AppleNotesDataFolderAccessSessionFactory
     private var syncIndex: SyncIndex
     private var syncAnimationCancellable: AnyCancellable?
     private var automaticSyncCancellable: AnyCancellable?
     private let notesDatabaseWatcher: NotesDatabaseWatcher
+    private var watcherAccessSession: AppleNotesDataFolderAccessSession?
     private var pendingOnChangeSyncTask: Task<Void, Never>?
     private var cancellables: Set<AnyCancellable> = []
 
@@ -146,6 +150,7 @@ final class AppModel: ObservableObject {
         appUpdater: (any AppUpdating)? = nil,
         permissionsManager: PermissionsManager = PermissionsManager(),
         statusObserver: (@MainActor @Sendable (String) -> Void)? = nil,
+        appleNotesDataFolderAccessSessionFactory: @escaping AppleNotesDataFolderAccessSessionFactory = makeAppleNotesDataFolderAccessSession,
         startImmediately: Bool = true
     ) {
         let resolvedBuildFlavor = buildFlavor
@@ -189,6 +194,7 @@ final class AppModel: ObservableObject {
         self.slashCommandEngine = slashCommandEngine
         self.formattingBarController = formattingBarController
         self.statusObserver = statusObserver
+        self.appleNotesDataFolderAccessSessionFactory = appleNotesDataFolderAccessSessionFactory
         self.interactionState = InteractionState(
             selectionContext: nil,
             availability: .default(for: resolvedBuildFlavor)
@@ -585,10 +591,7 @@ final class AppModel: ObservableObject {
             statusMessage = tf("Apple Notes data folder set to %@.", selection.rootURL.lastPathComponent)
             return (
                 selection,
-                makeAppleNotesDataFolderAccessSession(
-                    path: selectedURL.path,
-                    bookmarkData: bookmarkData
-                )
+                appleNotesDataFolderAccessSessionFactory(selectedURL.path, bookmarkData)
             )
         } catch {
             present(error, fallback: t("Failed to access Apple Notes data folder."))
@@ -609,6 +612,7 @@ final class AppModel: ObservableObject {
         let appleNotesSyncDataSource = self.appleNotesSyncDataSource
         let appleNotesDataPath = self.settings.appleNotesDataPath
         let appleNotesDataBookmark = self.settings.appleNotesDataBookmark
+        let accessSessionFactory = self.appleNotesDataFolderAccessSessionFactory
         isRefreshingFolders = true
         statusMessage = t("Refreshing Apple Notes folders...")
 
@@ -618,10 +622,7 @@ final class AppModel: ObservableObject {
 
         do {
             let fetchedFolders = try await Task.detached(priority: .userInitiated) {
-                if let accessSession = makeAppleNotesDataFolderAccessSession(
-                    path: appleNotesDataPath,
-                    bookmarkData: appleNotesDataBookmark
-                ) {
+                if let accessSession = accessSessionFactory(appleNotesDataPath, appleNotesDataBookmark) {
                     defer {
                         accessSession.stopAccessing()
                     }
@@ -662,6 +663,7 @@ final class AppModel: ObservableObject {
         let vaultClient = self.vaultClient
         let settings = self.settings
         let dataFolderBookmark = self.settings.appleNotesDataBookmark
+        let accessSessionFactory = self.appleNotesDataFolderAccessSessionFactory
         let syncIndexSnapshot = self.syncIndex
         let progressReporter = makeSyncProgressReporter()
 
@@ -688,10 +690,7 @@ final class AppModel: ObservableObject {
                 var timings = IncrementalSyncTimings()
                 let loadManifestStart = Date()
                 let manifest = try {
-                    if let accessSession = makeAppleNotesDataFolderAccessSession(
-                        path: dataFolderSelection.rootURL.path,
-                        bookmarkData: dataFolderBookmark
-                    ) {
+                    if let accessSession = accessSessionFactory(dataFolderSelection.rootURL.path, dataFolderBookmark) {
                         defer { accessSession.stopAccessing() }
                         return try appleNotesSyncDataSource.loadManifest(fromDataFolder: accessSession.url.path)
                     }
@@ -713,10 +712,7 @@ final class AppModel: ObservableObject {
                 let noteIDsToLoad = Set(plan.exports.map(\.manifestEntry.databaseNoteID))
                 let loadDocumentsStart = Date()
                 let changedSnapshot = try {
-                    if let accessSession = makeAppleNotesDataFolderAccessSession(
-                        path: dataFolderSelection.rootURL.path,
-                        bookmarkData: dataFolderBookmark
-                    ) {
+                    if let accessSession = accessSessionFactory(dataFolderSelection.rootURL.path, dataFolderBookmark) {
                         defer { accessSession.stopAccessing() }
                         return try appleNotesSyncDataSource.loadDocuments(
                             fromDataFolder: accessSession.url.path,
@@ -893,6 +889,7 @@ final class AppModel: ObservableObject {
         let vaultClient = self.vaultClient
         let settings = self.settings
         let dataFolderBookmark = self.settings.appleNotesDataBookmark
+        let accessSessionFactory = self.appleNotesDataFolderAccessSessionFactory
         let existingRecords = self.syncIndex.records
         let progressReporter = makeSyncProgressReporter()
 
@@ -1085,10 +1082,7 @@ final class AppModel: ObservableObject {
 
                 let loadSnapshotStart = Date()
                 let snapshot = try {
-                    if let accessSession = makeAppleNotesDataFolderAccessSession(
-                        path: dataFolderSelection.rootURL.path,
-                        bookmarkData: dataFolderBookmark
-                    ) {
+                    if let accessSession = accessSessionFactory(dataFolderSelection.rootURL.path, dataFolderBookmark) {
                         defer {
                             accessSession.stopAccessing()
                         }
@@ -1352,6 +1346,8 @@ final class AppModel: ObservableObject {
         automaticSyncCancellable?.cancel()
         automaticSyncCancellable = nil
         notesDatabaseWatcher.stop()
+        watcherAccessSession?.stopAccessing()
+        watcherAccessSession = nil
         pendingOnChangeSyncTask?.cancel()
         pendingOnChangeSyncTask = nil
 
@@ -1374,8 +1370,8 @@ final class AppModel: ObservableObject {
             }
         case .onChange:
             if let accessSession = resolveAppleNotesDataFolderAccessSession() {
+                watcherAccessSession = accessSession
                 notesDatabaseWatcher.start(dataFolderURL: accessSession.url)
-                accessSession.stopAccessing()
             }
         }
     }
@@ -1421,10 +1417,7 @@ final class AppModel: ObservableObject {
     }
 
     private func resolveAppleNotesDataFolderAccessSession() -> AppleNotesDataFolderAccessSession? {
-        makeAppleNotesDataFolderAccessSession(
-            path: settings.appleNotesDataPath,
-            bookmarkData: settings.appleNotesDataBookmark
-        )
+        appleNotesDataFolderAccessSessionFactory(settings.appleNotesDataPath, settings.appleNotesDataBookmark)
     }
 
     private func startSyncAnimation() {

@@ -38,6 +38,13 @@ enum ObsidianVaultError: LocalizedError {
 }
 
 struct ObsidianVaultClient: Sendable {
+    private static let updatedAtPlaceholder = "__NOTESBRIDGE_UPDATED_AT__"
+    private let currentDateProvider: @Sendable () -> Date
+
+    init(currentDateProvider: @escaping @Sendable () -> Date = Date.init) {
+        self.currentDateProvider = currentDateProvider
+    }
+
     func moveExportedNoteToRemoved(
         relativePath: String,
         settings: AppSettings
@@ -163,9 +170,24 @@ struct ObsidianVaultClient: Sendable {
             fileManager: fileManager
         )
             || attachmentsChanged
-        let frontMatter = frontMatter(for: note)
-        let contents = frontMatter + renderedMarkdown.markdown.trimmingCharacters(in: .whitespacesAndNewlines) + "\n"
+        let noteBody = renderedMarkdown.markdown.trimmingCharacters(in: .whitespacesAndNewlines) + "\n"
         let existingContents = try? String(contentsOf: fileURL, encoding: .utf8)
+        let comparisonContents = frontMatter(
+            for: note,
+            updatedAtValue: Self.updatedAtPlaceholder
+        ) + noteBody
+        let contentChangedIgnoringUpdatedAt = existingContents
+            .map(normalizedUpdatedAtContents(in:))
+            != comparisonContents
+        let shouldRefreshUpdatedAt = !noteFileExistedBeforeExport
+            || noteFileMoved
+            || attachmentsChanged
+            || contentChangedIgnoringUpdatedAt
+        let updatedAtValue = shouldRefreshUpdatedAt
+            ? currentDateProvider().frontMatterDateString
+            : existingUpdatedAtValue(in: existingContents)
+                ?? currentDateProvider().frontMatterDateString
+        let contents = frontMatter(for: note, updatedAtValue: updatedAtValue) + noteBody
         let noteFileChanged = existingContents != contents
         if noteFileChanged {
             try contents.write(to: fileURL, atomically: true, encoding: .utf8)
@@ -174,7 +196,7 @@ struct ObsidianVaultClient: Sendable {
         let changeKind: NoteExportChangeKind
         if !noteFileExistedBeforeExport {
             changeKind = .created
-        } else if noteFileMoved || noteFileChanged || attachmentsChanged {
+        } else if noteFileMoved || contentChangedIgnoringUpdatedAt || attachmentsChanged {
             changeKind = .updated
         } else {
             changeKind = .unchanged
@@ -548,7 +570,10 @@ struct ObsidianVaultClient: Sendable {
         return didChange
     }
 
-    private func frontMatter(for note: AppleNotesSyncDocument) -> String {
+    private func frontMatter(
+        for note: AppleNotesSyncDocument,
+        updatedAtValue: String
+    ) -> String {
         var lines = [
             "---",
             "source: \"apple-notes\"",
@@ -564,12 +589,39 @@ struct ObsidianVaultClient: Sendable {
         }
         let folderValue = note.exportFolderPath.isEmpty ? note.folderDisplayName : note.exportFolderPath
         lines.append("apple_notes_folder: \"\(yamlEscaped(folderValue))\"")
-        lines.append("created_at: \"\(note.createdAt?.iso8601String ?? "")\"")
-        lines.append("updated_at: \"\(note.updatedAt?.iso8601String ?? "")\"")
+        lines.append("created_at: \"\(note.createdAt?.frontMatterDateString ?? "")\"")
+        lines.append("updated_at: \"\(yamlEscaped(updatedAtValue))\"")
         lines.append("shared: \(note.shared)")
         lines.append("---")
         lines.append("")
         return lines.joined(separator: "\n")
+    }
+
+    private func existingUpdatedAtValue(in contents: String?) -> String? {
+        guard let contents else {
+            return nil
+        }
+
+        let pattern = #"\nupdated_at: "([^"]*)""#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else {
+            return nil
+        }
+        let range = NSRange(contents.startIndex..., in: contents)
+        guard let match = regex.firstMatch(in: contents, range: range),
+              let valueRange = Range(match.range(at: 1), in: contents)
+        else {
+            return nil
+        }
+
+        return String(contents[valueRange])
+    }
+
+    private func normalizedUpdatedAtContents(in contents: String) -> String {
+        contents.replacingOccurrences(
+            of: #"updated_at: "[^"]*""#,
+            with: #"updated_at: "\#(Self.updatedAtPlaceholder)""#,
+            options: .regularExpression
+        )
     }
 
     private func attachmentDirectoryURL(
@@ -910,7 +962,12 @@ private struct ObsidianAppConfiguration: Decodable {
 }
 
 private extension Date {
-    var iso8601String: String {
-        ISO8601DateFormatter().string(from: self)
+    var frontMatterDateString: String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .autoupdatingCurrent
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return formatter.string(from: self)
     }
 }
