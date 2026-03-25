@@ -7,3 +7,7 @@ DerivedData/
 .swiftpm/configuration/registries.json
 /scripts/__pycache__/
 .netrc
+*-handoff.md
+AGENTS.md
+.playwright-cli/
+.worktree-attachments/
