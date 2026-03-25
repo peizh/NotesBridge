@@ -2,14 +2,14 @@
 
 [English](./README.md) | [简体中文](./README.zh-CN.md) | [Français](./README.fr.md)
 
-[![CI](https://img.shields.io/github/actions/workflow/status/peizh/NoteBridge/ci.yml?branch=main&label=CI)](https://github.com/peizh/NoteBridge/actions/workflows/ci.yml)
-[![GitHub stars](https://img.shields.io/github/stars/peizh/NoteBridge?style=social)](https://github.com/peizh/NoteBridge/stargazers)
-[![GitHub forks](https://img.shields.io/github/forks/peizh/NoteBridge?style=social)](https://github.com/peizh/NoteBridge/network/members)
+[![CI](https://img.shields.io/github/actions/workflow/status/peizh/NotesBridge/ci.yml?branch=main&label=CI)](https://github.com/peizh/NotesBridge/actions/workflows/ci.yml)
+[![GitHub stars](https://img.shields.io/github/stars/peizh/NotesBridge?style=social)](https://github.com/peizh/NotesBridge/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/peizh/NotesBridge?style=social)](https://github.com/peizh/NotesBridge/network/members)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 
 ![NotesBridge social banner](./images/notesbridge-social.svg)
 
-Website: [peizh.github.io/NoteBridge](https://peizh.github.io/NoteBridge/)
+Website: [peizh.github.io/NotesBridge](https://peizh.github.io/NotesBridge/)
 
 NotesBridge is a native macOS companion for Apple Notes. It runs as a menu bar app, adds inline editing enhancements on top of Apple Notes, and exports notes into local Markdown files and folders you can keep, search, version, and use with AI agents.
 
@@ -36,7 +36,7 @@ If you already use Apple Notes for capture and Obsidian or other local first not
 
 ## Quick start
 
-1. Download the latest direct-download build from [Releases](https://github.com/peizh/NoteBridge/releases).
+1. Download the latest direct-download build from [Releases](https://github.com/peizh/NotesBridge/releases).
 2. Move `NotesBridge.app` into `/Applications`.
 3. Launch the app and grant the requested macOS permissions.
 4. Choose your Apple Notes data folder on first full sync.

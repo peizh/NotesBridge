@@ -2,14 +2,14 @@
 
 [English](./README.md) | [简体中文](./README.zh-CN.md) | [Français](./README.fr.md)
 
-[![CI](https://img.shields.io/github/actions/workflow/status/peizh/NoteBridge/ci.yml?branch=main&label=CI)](https://github.com/peizh/NoteBridge/actions/workflows/ci.yml)
-[![GitHub stars](https://img.shields.io/github/stars/peizh/NoteBridge?style=social)](https://github.com/peizh/NoteBridge/stargazers)
-[![GitHub forks](https://img.shields.io/github/forks/peizh/NoteBridge?style=social)](https://github.com/peizh/NoteBridge/network/members)
+[![CI](https://img.shields.io/github/actions/workflow/status/peizh/NotesBridge/ci.yml?branch=main&label=CI)](https://github.com/peizh/NotesBridge/actions/workflows/ci.yml)
+[![GitHub stars](https://img.shields.io/github/stars/peizh/NotesBridge?style=social)](https://github.com/peizh/NotesBridge/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/peizh/NotesBridge?style=social)](https://github.com/peizh/NotesBridge/network/members)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 
 ![NotesBridge social banner](./images/notesbridge-social.svg)
 
-Site web : [peizh.github.io/NoteBridge](https://peizh.github.io/NoteBridge/)
+Site web : [peizh.github.io/NotesBridge](https://peizh.github.io/NotesBridge/)
 
 NotesBridge est une application compagnon native macOS pour Apple Notes. Elle fonctionne comme une app de barre de menus, ajoute des améliorations d'édition en ligne au-dessus d'Apple Notes et exporte les notes vers des fichiers et dossiers Markdown locaux que vous pouvez conserver, rechercher, versionner et utiliser avec des agents IA.
 
@@ -36,7 +36,7 @@ Si vous utilisez déjà Apple Notes pour la capture et Obsidian, ou d'autres app
 
 ## Démarrage rapide
 
-1. Téléchargez le dernier build en téléchargement direct depuis [Releases](https://github.com/peizh/NoteBridge/releases).
+1. Téléchargez le dernier build en téléchargement direct depuis [Releases](https://github.com/peizh/NotesBridge/releases).
 2. Déplacez `NotesBridge.app` dans `/Applications`.
 3. Lancez l'application et accordez les autorisations macOS demandées.
 4. Choisissez votre dossier de données Apple Notes lors de la première synchronisation complète.

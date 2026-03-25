@@ -56,13 +56,13 @@ That means:
 Use Sparkle's bundled tool from this repository:
 
 ```bash
-./.build/artifacts/sparkle/Sparkle/bin/generate_keys --account NoteBridge
+./.build/artifacts/sparkle/Sparkle/bin/generate_keys --account NotesBridge
 ```
 
 Recommended:
 
 - run this on a trusted Mac
-- use a stable account name such as `NoteBridge`
+- use a stable account name such as `NotesBridge`
 - allow Keychain access when prompted
 
 The tool prints the **public key** that must be embedded into the app.
@@ -73,7 +73,7 @@ Export the matching private key from Keychain into a file:
 
 ```bash
 ./.build/artifacts/sparkle/Sparkle/bin/generate_keys \
-  --account NoteBridge \
+  --account NotesBridge \
   -x /tmp/NotesBridge.sparkle.key
 ```
 
@@ -135,7 +135,7 @@ After updating the embedded public key and setting the private-key secret:
 4. verify the feed URL returns `200`:
 
 ```bash
-curl -I -L https://peizh.github.io/NoteBridge/updates/appcast.xml
+curl -I -L https://peizh.github.io/NotesBridge/updates/appcast.xml
 ```
 
 5. verify `gh-pages` exists:
