@@ -44,7 +44,6 @@ jobs:
           version="${version#v}"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=$version" >> "$GITHUB_OUTPUT"
-          echo "build_number=${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${{ inputs.notarize }}" == "true" ]]; then
             echo "notarize=1" >> "$GITHUB_OUTPUT"
           else
@@ -84,7 +83,6 @@ jobs:
       - name: Build release app
         env:
           NOTESBRIDGE_VERSION: ${{ steps.meta.outputs.version }}
-          NOTESBRIDGE_BUILD_NUMBER: ${{ steps.meta.outputs.build_number }}
           NOTESBRIDGE_BUNDLE_ID: dev.notesbridge.app
           NOTESBRIDGE_SIGN_IDENTITY: ${{ secrets.MACOS_DEVELOPER_ID_APPLICATION }}
           NOTESBRIDGE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
