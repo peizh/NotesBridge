@@ -1,3 +1,4 @@
+import Combine
 import Testing
 @testable import NotesBridge
 
@@ -41,13 +42,9 @@ struct AppModelSyncProgressTests {
             startImmediately: false
         )
 
-        let syncTask = Task {
+        let snapshots = await captureProgressSnapshots(from: model) {
             await model.syncAllNotes()
         }
-
-        let snapshots = await captureProgressSnapshots(from: model, while: syncTask)
-
-        await syncTask.value
 
         let sawInboxProgress = snapshots.contains { snapshot in
             snapshot.currentFolderName == "Inbox"
@@ -104,18 +101,14 @@ struct AppModelSyncProgressTests {
             startImmediately: false
         )
 
-        let syncTask = Task {
+        let snapshots = await captureProgressSnapshots(from: model) {
             await model.syncAllNotes()
         }
-
-        let snapshots = await captureProgressSnapshots(from: model, while: syncTask)
         let sawInFlightProgress = snapshots.contains { snapshot in
             snapshot.totalNotes == 2 &&
                 snapshot.totalFolders == 1 &&
                 snapshot.currentFolderName == "Inbox"
         }
-
-        await syncTask.value
 
         #expect(sawInFlightProgress)
         #expect(model.syncProgress == nil)
@@ -199,29 +192,24 @@ struct AppModelSyncProgressTests {
     @MainActor
     private func captureProgressSnapshots(
         from model: AppModel,
-        while task: Task<Void, Never>
+        perform operation: @escaping @MainActor () async -> Void
     ) async -> [SyncProgress] {
         var snapshots: [SyncProgress] = []
-        var sawSyncStart = false
-
-        for _ in 0 ..< 5_000 {
-            if model.isSyncing {
-                sawSyncStart = true
-            }
-
-            if let progress = model.syncProgress, snapshots.last != progress {
+        let cancellable = model.$syncProgress
+            .compactMap { $0 }
+            .removeDuplicates()
+            .sink { progress in
                 snapshots.append(progress)
             }
 
-            if sawSyncStart && !model.isSyncing && model.syncProgress == nil {
-                break
-            }
+        await operation()
 
-            if task.isCancelled {
-                break
-            }
+        // Allow any final main-actor publication to drain before returning snapshots.
+        await Task.yield()
+        cancellable.cancel()
 
-            await Task.yield()
+        if let progress = model.syncProgress, snapshots.last != progress {
+            snapshots.append(progress)
         }
 
         return snapshots
