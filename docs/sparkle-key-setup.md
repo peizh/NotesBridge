@@ -135,7 +135,7 @@ After updating the embedded public key and setting the private-key secret:
 4. verify the feed URL returns `200`:
 
 ```bash
-curl -I -L https://peizh.github.io/NotesBridge/updates/appcast.xml
+curl -I -L https://notesbridge.peizh.live/updates/appcast.xml
 ```
 
 5. verify `gh-pages` exists:

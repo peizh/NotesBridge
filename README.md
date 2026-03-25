@@ -9,7 +9,7 @@
 
 ![NotesBridge social banner](./images/notesbridge-social.svg)
 
-Website: [peizh.github.io/NotesBridge](https://peizh.github.io/NotesBridge/)
+Website: [notesbridge.peizh.live](https://notesbridge.peizh.live/)
 
 NotesBridge is a native macOS companion for Apple Notes. It runs as a menu bar app, adds inline editing enhancements on top of Apple Notes, and exports notes into local Markdown files and folders you can keep, search, version, and use with AI agents.
 
