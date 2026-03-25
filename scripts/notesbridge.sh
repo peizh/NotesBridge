@@ -34,9 +34,10 @@ notesbridge_resolve_build_number() {
     if [[ -z "${build_number:-}" ]]; then
         local commit_count
         commit_count="$(git -C "$NOTESBRIDGE_ROOT_DIR" rev-list --count HEAD 2>/dev/null || echo 1)"
-        local date_prefix
-        date_prefix="$(date +%Y%m%d)"
-        build_number="$date_prefix.$commit_count"
+        local commit_date
+        # Get date of HEAD commit in YYYYMMDD format
+        commit_date="$(git -C "$NOTESBRIDGE_ROOT_DIR" show -s --format=%cd --date=format:%Y%m%d HEAD 2>/dev/null || date +%Y%m%d)"
+        build_number="$commit_date.$commit_count"
     fi
 
     printf '%s\n' "$build_number"
@@ -86,7 +87,7 @@ Options:
   --app-name NAME         App bundle name (default: NotesBridge)
   --bundle-id ID          CFBundleIdentifier (default: dev.notesbridge.app)
   --version VERSION       CFBundleShortVersionString (default: VERSION file or latest git tag)
-  --build-number NUMBER   CFBundleVersion (default: git commit count)
+  --build-number NUMBER   CFBundleVersion (default: YYYYMMDD.commitCount from HEAD)
   --sign-identity NAME    codesign identity (default: ad-hoc "-")
   --team-id TEAM          Optional TeamIdentifier for Info.plist
   --launch                Open the built app after packaging
