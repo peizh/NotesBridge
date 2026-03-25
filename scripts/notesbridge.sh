@@ -179,7 +179,7 @@ run_bundle_command() {
     local sign_identity="-"
     local team_id=""
     local launch_after_build=0
-    local sparkle_feed_url="${NOTESBRIDGE_SPARKLE_FEED_URL:-https://peizh.github.io/NotesBridge/updates/appcast.xml}"
+    local sparkle_feed_url="${NOTESBRIDGE_SPARKLE_FEED_URL:-https://notesbridge.peizh.live/updates/appcast.xml}"
     local sparkle_public_ed_key="${NOTESBRIDGE_SPARKLE_PUBLIC_ED_KEY:-bN0AdWyNntmdvuNQNXa2pDP8peMGNfsbBcrXIBf60ys=}"
 
     while [[ $# -gt 0 ]]; do
@@ -566,7 +566,7 @@ run_notarize_command() {
 run_appcast_command() {
     local generate_appcast="${NOTESBRIDGE_GENERATE_APPCAST:-$ROOT_DIR/.build/artifacts/sparkle/Sparkle/bin/generate_appcast}"
     local github_repository_slug="${NOTESBRIDGE_GITHUB_REPOSITORY:-peizh/NotesBridge}"
-    local pages_base_url="${NOTESBRIDGE_PAGES_BASE_URL:-https://peizh.github.io/NotesBridge}"
+    local pages_base_url="${NOTESBRIDGE_PAGES_BASE_URL:-https://notesbridge.peizh.live}"
     local sparkle_private_ed_key="${SPARKLE_PRIVATE_ED_KEY:-${NOTESBRIDGE_SPARKLE_PRIVATE_ED_KEY:-}}"
     local version=""
     local archive_path=""

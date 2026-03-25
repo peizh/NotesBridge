@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>NotesBridge | 苹果笔记转 Markdown 桌面伴侣</title>
+    <meta
+      name="description"
+      content="NotesBridge 是一个原生 macOS 伴侣应用。它在 Apple Notes 之上提供行内编辑增强能力，并将笔记导出为可保存、搜索、版本管理、并可与 AI agents 协作的本地 Markdown 文件和文件夹。"
+    >
+    <meta name="theme-color" content="#fdfaf3">
+    <meta property="og:title" content="NotesBridge">
+    <meta
+      property="og:description"
+      content="Apple Notes 用于分享、记录。Markdown 用于专业使用。"
+    >
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://notesbridge.peizh.live/index.zh-CN.html">
+    <meta
+      property="og:image"
+      content="https://notesbridge.peizh.live/assets/notesbridge-social.svg"
+    >
+    <link rel="icon" href="./assets/notesbridge-app-icon.svg" type="image/svg+xml">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700;9..144,800&family=Manrope:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    >
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="topbar">
+        <a class="brand" href="index.html" aria-label="NotesBridge 首页">
+          <img src="./assets/notesbridge-app-icon.svg" alt="NotesBridge 图标">
+          <span>NotesBridge</span>
+        </a>
+        <nav class="topnav" aria-label="主要导航">
+          <a href="#proof">功能</a>
+          <a href="#workflow">工作流</a>
+          <a href="#faq">常见问题</a>
+        </nav>
+        <a class="topbar-action" href="https://github.com/peizh/NotesBridge/releases">
+          下载
+        </a>
+      </header>
+
+      <main id="top">
+        <section class="hero">
+          <div class="hero-copy">
+            <p class="eyebrow">Apple Notes 的 macOS 伴侣应用</p>
+            <h1>Apple Notes 用于分享、记录。Markdown 用于专业使用。</h1>
+            <p class="hero-intro">
+              NotesBridge 在 Apple Notes 之上添加了专业编辑层，并支持导出一个在 Obsidian、Git 和 AI 工作流中持续可用的本地 Markdown 工作区。
+            </p>
+            <div class="hero-actions">
+              <a class="button button-primary" href="https://github.com/peizh/NotesBridge/releases">
+                下载最新版本
+              </a>
+              <a class="button button-secondary" href="#proof">
+                了解更多
+              </a>
+            </div>
+          </div>
+
+          <div class="hero-proof">
+            <div class="proof-panel proof-input">
+              <span class="proof-label">在 Apple Notes 内部</span>
+              <div class="note-canvas">
+                <p class="note-title">每周计划</p>
+                <p class="note-line">• 完成发布说明</p>
+                <p class="note-line">• 查看 <span class="note-link">发布核对清单</span></p>
+                <div class="floating-tools">
+                  <span>H1</span>
+                  <span>B</span>
+                  <span>I</span>
+                  <span>S</span>
+                </div>
+                <div class="slash-command">
+                  <span>/task</span>
+                  <small>待办事项</small>
+                </div>
+              </div>
+            </div>
+            <div class="proof-panel proof-output">
+              <span class="proof-label">磁盘上的文件 (Markdown)</span>
+              <div class="file-stack">
+                <div class="file-tree">
+                  <span>Vault/</span>
+                  <span>&nbsp;&nbsp;Work/</span>
+                  <span>&nbsp;&nbsp;&nbsp;&nbsp;Weekly planning.md</span>
+                </div>
+                <pre><code># 每周计划
+
+- 完成发布说明
+- 查看 [[发布核对清单]]</code></pre>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section proof" id="proof">
+          <div class="section-heading">
+            <p class="eyebrow">产品能力</p>
+            <h2>一个在之上增强，一个在之下归档。</h2>
+          </div>
+
+          <div class="proof-columns">
+            <article class="proof-column">
+              <p class="column-kicker">行内编辑增强</p>
+              <h3>在 macOS 上获得专业编辑体验。</h3>
+              <ul>
+                <li>Slash commands 瞬间完成格式设置</li>
+                <li>Markdown 触发器快速生成列表和结构</li>
+                <li>浮动工具栏实现文本快速选中样式设置</li>
+              </ul>
+            </article>
+
+            <article class="proof-column">
+              <p class="column-kicker">同步导出</p>
+              <h3>持久的、本地优先的工作空间。</h3>
+              <ul>
+                <li>文件夹结构被完整保留为真实目录</li>
+                <li>原生附件被同步导出到对应位置</li>
+                <li>保留 Front matter 元数据和内部链接</li>
+              </ul>
+            </article>
+
+            <article class="proof-column">
+              <p class="column-kicker">谁适合使用</p>
+              <h3>为您已有的工具而设计。</h3>
+              <ul>
+                <li>Obsidian 仓库的完美伴侣</li>
+                <li>使用 Git 为您的笔记进行版本控制</li>
+                <li>将您的知识库交给 AI agents 处理</li>
+              </ul>
+            </article>
+          </div>
+        </section>
+
+        <section class="section workflow" id="workflow">
+          <div class="section-heading">
+            <p class="eyebrow">工作流</p>
+            <h2>轻松上手，持久留存。</h2>
+          </div>
+
+          <ol class="workflow-rail">
+            <li>
+              <span class="step-index">01</span>
+              <div>
+                <h3>连接到 Apple Notes</h3>
+                <p>
+                  启动菜单栏应用并授予必要的权限。NotesBridge 直接读取您的本地 Apple Notes 数据库——无需经过云端中转。
+                </p>
+              </div>
+            </li>
+
+            <li>
+              <span class="step-index">02</span>
+              <div>
+                <h3>设置归档目录</h3>
+                <p>
+                  选择一个本地文件夹或您的 Obsidian 仓库。NotesBridge 会将您的 Apple Notes 文件夹映射为清晰、可搜索的 Markdown 层级。
+                </p>
+              </div>
+            </li>
+
+            <li>
+              <span class="step-index">03</span>
+              <div>
+                <h3>编写与同步</h3>
+                <p>
+                  使用我们的行内工具在 Apple Notes 中更快地记录。您的本地 Markdown 副本将保持同步，随时可供搜索、归档或自动化处理。
+                </p>
+              </div>
+            </li>
+          </ol>
+        </section>
+
+        <section class="section faq" id="faq">
+          <div class="section-heading">
+            <p class="eyebrow">常见问题</p>
+            <h2>Q&amp;A</h2>
+          </div>
+
+          <div class="faq-list">
+            <details open>
+              <summary>NotesBridge 是 Apple Notes 内部的插件吗？</summary>
+              <p>
+                不。Apple Notes 没有公开插件 API。NotesBridge 是一个独立的 macOS 伴侣应用，它使用辅助功能 (Accessibility) API 来提供行内编辑工具。
+              </p>
+            </details>
+
+            <details>
+              <summary>它支持反向同步到 Apple Notes 吗？</summary>
+              <p>
+                目前同步是单向的：Apple Notes 到 Markdown。这确保了您的本地仓库作为“可信归档”，同时允许您将 Apple Notes 作为主要的采集工具。
+              </p>
+            </details>
+
+            <details>
+              <summary>它能处理附件和图片吗？</summary>
+              <p>
+                可以。NotesBridge 会将 Apple Notes 的原生附件、扫描件和图片导出到 Markdown 文件旁边的 <code>attachments</code> 文件夹中，并保留它们的上下文。
+              </p>
+            </details>
+
+            <details>
+              <summary>为什么要用它而不是手动导出？</summary>
+              <p>
+                手动导出非常繁琐且会丢失层级结构。NotesBridge 实现了这一过程的自动化，保留了文件夹层级，处理了内部链接，并让您的 Markdown 仓库与您的记录保持同步。
+              </p>
+            </details>
+          </div>
+        </section>
+      </main>
+
+      <footer class="site-footer">
+        <div class="footer-copy">
+          <strong>NotesBridge</strong>
+          <p>
+            在 Apple Notes 采集与本地 Markdown 归档之间搭建桥梁。
+          </p>
+        </div>
+        <nav class="footer-links">
+          <a href="https://github.com/peizh/NotesBridge/releases">Releases</a>
+          <a href="https://github.com/peizh/NotesBridge">GitHub</a>
+          <a href="index.html">English</a>
+          <a href="index.fr.html">Français</a>
+        </nav>
+      </footer>
+    </div>
+  </body>
+</html>
