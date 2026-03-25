@@ -1,24 +1,25 @@
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
 
-  /* Refined Stationery Palette (Warm Cream & Deep Ink) */
-  --paper: light-dark(oklch(98% 0.012 60), oklch(18% 0.015 60));
-  --paper-subtle: light-dark(oklch(96% 0.015 60), oklch(22% 0.018 60));
-  --paper-deep: light-dark(oklch(92% 0.025 60), oklch(14% 0.02 60));
+  /* Refined Stationery Palette (Warm Cream & Deep Ink) - Forced Light Mode */
+  --paper: oklch(98% 0.012 60);
+  --paper-subtle: oklch(96% 0.015 60);
+  --paper-deep: oklch(92% 0.025 60);
 
-  --ink: light-dark(oklch(22% 0.024 60), oklch(92% 0.015 60));
-  --ink-soft: light-dark(oklch(42% 0.02 60), oklch(78% 0.012 60));
+  --ink: oklch(22% 0.024 60);
+  --ink-soft: oklch(42% 0.02 60);
 
-  --accent: light-dark(oklch(62% 0.16 34), oklch(72% 0.14 34));
-  --accent-soft: light-dark(oklch(94% 0.03 34), oklch(28% 0.08 34));
-  --accent-deep: light-dark(oklch(48% 0.18 34), oklch(82% 0.12 34));
+  --accent: oklch(62% 0.16 34);
+  --accent-soft: oklch(94% 0.03 34);
+  --accent-deep: oklch(48% 0.18 34);
 
-  --line: light-dark(oklch(0% 0 0 / 0.1), oklch(100% 0 0 / 0.1));
-  --line-strong: light-dark(oklch(0% 0 0 / 0.2), oklch(100% 0 0 / 0.2));
+  --line: oklch(0% 0 0 / 0.1);
+  --line-strong: oklch(0% 0 0 / 0.2);
 
-  --shadow-sm: 0 2px 8px light-dark(oklch(0% 0 0 / 0.04), oklch(0% 0 0 / 0.2));
-  --shadow-md: 0 12px 32px -4px light-dark(oklch(0% 0 0 / 0.08), oklch(0% 0 0 / 0.4));
-  --shadow-lg: 0 24px 64px -12px light-dark(oklch(0% 0 0 / 0.12), oklch(0% 0 0 / 0.6));
+  --shadow-sm: 0 2px 8px oklch(0% 0 0 / 0.04);
+  --shadow-md: 0 12px 32px -4px oklch(0% 0 0 / 0.08);
+  --shadow-lg: 0 24px 64px -12px oklch(0% 0 0 / 0.12);
+>>>>>>> fc6ddb3 (Refine GitHub Pages landing page with Gemini.)
 
   --radius: 32px;
   --radius-sm: 16px;
@@ -581,6 +582,7 @@ img {
   }
 
   .hero-proof {
+    aspect-ratio: auto;
     height: 500px;
     max-width: 600px;
     margin: 0 auto;
@@ -588,6 +590,46 @@ img {
 
   .proof-columns {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .topbar {
+    flex-direction: column;
+    gap: 24px;
+>>>>>>> fc6ddb3 (Refine GitHub Pages landing page with Gemini.)
+  }
+
+  .hero-intro {
+    max-width: none;
+  }
+
+  .hero-proof {
+    height: 500px;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  .proof-columns {
+    grid-template-columns: 1fr;
+    padding: 32px;
+    gap: 24px;
+  }
+
+  .step-index {
+    font-size: 3rem;
+  }
+
+  .site-footer {
+    flex-direction: column;
+    gap: 48px;
+    text-align: center;
+    align-items: center;
+  }
+
+  .footer-links {
+    flex-wrap: wrap;
+    justify-content: center;
   }
 }
 
