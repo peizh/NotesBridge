@@ -123,12 +123,6 @@ Usage: $0 release-notes VERSION
 EOF
 }
 
-notesbridge_has_version_tag() {
-    local version="${1#v}"
-    git -C "$NOTESBRIDGE_ROOT_DIR" rev-parse -q --verify "refs/tags/$version" >/dev/null 2>&1 \
-        || git -C "$NOTESBRIDGE_ROOT_DIR" rev-parse -q --verify "refs/tags/v$version" >/dev/null 2>&1
-}
-
 notesbridge_release_notes_end_ref() {
     local version="${1#v}"
 
