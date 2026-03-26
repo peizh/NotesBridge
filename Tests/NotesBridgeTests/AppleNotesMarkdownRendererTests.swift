@@ -325,6 +325,22 @@ struct AppleNotesMarkdownRendererTests {
     }
 
     @Test
+    func insertsBlankLineBetweenChecklistAndFollowingLinkParagraph() throws {
+        let note = makeNote(
+            segments: [
+                segment("Confirm source\n", styleType: 103),
+                segment("Open reference", link: "https://example.com"),
+            ]
+        )
+
+        let rendered = try renderer.render(note: note) { _ in
+            .inlineText("")
+        }
+
+        #expect(rendered.markdownTemplate == "- [ ] Confirm source\n\n[Open reference](https://example.com)")
+    }
+
+    @Test
     func collectsInternalLinksReturnedFromAttachmentResolver() throws {
         let note = makeNote(
             segments: [

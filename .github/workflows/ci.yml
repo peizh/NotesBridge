@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - "agent/**"
   pull_request:
 
 jobs:
@@ -82,9 +81,6 @@ jobs:
 
       - name: Resolve package dependencies
         run: swift package resolve
-
-      - name: Run Swift tests
-        run: swift test
 
       - name: Run Xcode tests
         run: xcodebuild -scheme NotesBridge -workspace .swiftpm/xcode/package.xcworkspace -destination 'platform=macOS' test

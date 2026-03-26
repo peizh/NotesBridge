@@ -450,6 +450,7 @@ private extension AppleNotesMarkdownRenderer {
         var listNumber = 0
         var listIndent = 0
         var insideMonospacedBlock = false
+        var lastRenderedParagraphStyle: AppleNotesDecodedParagraphStyle?
 
         var finalizedMarkdown: String {
             let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -486,10 +487,12 @@ private extension AppleNotesMarkdownRenderer {
                 if insideMonospacedBlock {
                     output.append(segment)
                     isAtLineStart = false
+                    lastRenderedParagraphStyle = run.paragraphStyle
                     continue
                 }
 
                 if isAtLineStart {
+                    ensureParagraphSeparation(before: run)
                     output.append(paragraphPrefix(for: run))
                 }
 
@@ -503,6 +506,7 @@ private extension AppleNotesMarkdownRenderer {
                     output.append(formattedText(segment, run: run))
                 }
                 isAtLineStart = false
+                lastRenderedParagraphStyle = run.paragraphStyle
             }
         }
 
@@ -524,18 +528,24 @@ private extension AppleNotesMarkdownRenderer {
             switch try attachmentResolver(attachmentInfo) {
             case let .inlineText(text):
                 if isAtLineStart && !insideMonospacedBlock {
+                    ensureParagraphSeparation(before: run)
                     output.append(paragraphPrefix(for: run))
                 }
                 output.append(text)
                 isAtLineStart = text.hasSuffix("\n")
+                if !text.isEmpty {
+                    lastRenderedParagraphStyle = run.paragraphStyle
+                }
 
             case let .internalLink(link):
                 if isAtLineStart && !insideMonospacedBlock {
+                    ensureParagraphSeparation(before: run)
                     output.append(paragraphPrefix(for: run))
                 }
                 let placeholder = appendInternalLink(link)
                 output.append(placeholder)
                 isAtLineStart = false
+                lastRenderedParagraphStyle = run.paragraphStyle
 
             case let .attachment(attachment, isBlock):
                 let fragment = AppleNotesRenderedFragment(
@@ -569,6 +579,7 @@ private extension AppleNotesMarkdownRenderer {
                     output.append("\n")
                 }
                 if isAtLineStart && !insideMonospacedBlock {
+                    ensureParagraphSeparation(before: run)
                     output.append(paragraphPrefix(for: run))
                 }
                 output.append(uniqued.markdownTemplate)
@@ -576,14 +587,17 @@ private extension AppleNotesMarkdownRenderer {
                     output.append("\n")
                 }
                 isAtLineStart = true
+                lastRenderedParagraphStyle = run.paragraphStyle
                 return
             }
 
             if isAtLineStart && !insideMonospacedBlock {
+                ensureParagraphSeparation(before: run)
                 output.append(paragraphPrefix(for: run))
             }
             output.append(uniqued.markdownTemplate)
             isAtLineStart = uniqued.markdownTemplate.hasSuffix("\n")
+            lastRenderedParagraphStyle = run.paragraphStyle
         }
 
         private mutating func uniquedFragment(_ fragment: AppleNotesRenderedFragment) -> AppleNotesRenderedFragment {
@@ -682,6 +696,21 @@ private extension AppleNotesMarkdownRenderer {
             isAtLineStart = true
         }
 
+        private mutating func ensureParagraphSeparation(before run: AppleNotesDecodedAttributeRun) {
+            guard !output.isEmpty, isAtLineStart, !output.hasSuffix("\n\n") else {
+                return
+            }
+
+            let previousStyleType = lastRenderedParagraphStyle?.styleType ?? AppleNotesStyleType.default.rawValue
+            let currentStyleType = run.paragraphStyle?.styleType ?? AppleNotesStyleType.default.rawValue
+
+            guard isListStyle(previousStyleType), !isListStyle(currentStyleType) else {
+                return
+            }
+
+            output.append("\n")
+        }
+
         private mutating func paragraphPrefix(for run: AppleNotesDecodedAttributeRun) -> String {
             let paragraphStyle = run.paragraphStyle
             let styleType = paragraphStyle?.styleType ?? AppleNotesStyleType.default.rawValue
@@ -713,6 +742,18 @@ private extension AppleNotesMarkdownRenderer {
                 return prelude + indent + "- \(checked) "
             default:
                 return prelude
+            }
+        }
+
+        private func isListStyle(_ styleType: Int) -> Bool {
+            switch styleType {
+            case AppleNotesStyleType.dottedList.rawValue,
+                 AppleNotesStyleType.dashedList.rawValue,
+                 AppleNotesStyleType.numberedList.rawValue,
+                 AppleNotesStyleType.checkbox.rawValue:
+                return true
+            default:
+                return false
             }
         }
 
