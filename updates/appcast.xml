@@ -6,6 +6,17 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>NotesBridge</title>
         <item>
+            <title>0.2.8</title>
+            <pubDate>Thu, 26 Mar 2026 01:11:49 +0000</pubDate>
+            <link>https://github.com/peizh/NotesBridge/releases</link>
+            <sparkle:version>9</sparkle:version>
+            <sparkle:shortVersionString>0.2.8</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>10.13</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <sparkle:releaseNotesLink sparkle:edSignature="TXbWFXtLV3++05F2Ua66mE3UoUhu4WADLQZtsyDMvrKauUVXFgNRHNnuxQACJ4EdijbhKYsATZh6Esmllj5QDA==" sparkle:length="650">https://notesbridge.peizh.live/updates/NotesBridge-0.2.8-macOS.md</sparkle:releaseNotesLink>
+            <enclosure url="https://github.com/peizh/NotesBridge/releases/download/0.2.8/NotesBridge-0.2.8-macOS.zip" length="3467403" type="application/octet-stream" sparkle:edSignature="Vc/4pehaYaiJclg0Mq9Bvo1Co7vaOubmIZvK9v/eJ5ElhB44K9hCl7BeCM5pXWpP4EupFVyJ4LVvdmzH91NWCw=="/>
+        </item>
+        <item>
             <title>0.2.7</title>
             <pubDate>Wed, 25 Mar 2026 13:11:19 +0000</pubDate>
             <link>https://github.com/peizh/NotesBridge/releases</link>
@@ -27,20 +38,9 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
             <sparkle:releaseNotesLink sparkle:edSignature="yyf+m5K9CuU0x2c1MbpMp1Oh74bZ1QgVxkYJdDXq6YG/m6wk/xAM502QkIWT6K01a88mUAkJPm9xLB49wiSUAQ==" sparkle:length="797">https://peizh.github.io/NoteBridge/updates/NotesBridge-0.2.6-macOS.md</sparkle:releaseNotesLink>
             <enclosure url="https://github.com/peizh/NoteBridge/releases/download/0.2.6/NotesBridge-0.2.6-macOS.zip" length="3443736" type="application/octet-stream" sparkle:edSignature="+UOyjrL+S+KnyXzYZog0kYUSkDLLSgT8o+OigpjU+4p6bWARlpTelku/gkJGniZapRMmRhFh7Pw0SEdAI5JhCQ=="/>
         </item>
-        <item>
-            <title>0.2.5</title>
-            <pubDate>Tue, 24 Mar 2026 02:15:21 +0000</pubDate>
-            <link>https://github.com/peizh/NoteBridge/releases</link>
-            <sparkle:version>6</sparkle:version>
-            <sparkle:shortVersionString>0.2.5</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>10.13</sparkle:minimumSystemVersion>
-            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <sparkle:releaseNotesLink sparkle:edSignature="80kFGz4ELuaFtOdykYDXE0Ao5MT+N/VEbfxCEnYIpuoWdWxu8Rumc7WISJp8VbTKCk/Hi5ak2j3Ogp7LPSbcBA==" sparkle:length="847">https://peizh.github.io/NoteBridge/updates/NotesBridge-0.2.5-macOS.md</sparkle:releaseNotesLink>
-            <enclosure url="https://github.com/peizh/NoteBridge/releases/download/0.2.5/NotesBridge-0.2.5-macOS.zip" length="3440134" type="application/octet-stream" sparkle:edSignature="d5bIWsnAbOEj+x4WOLpaGiLqRLf2re8xaJi/imUJule2bfPG5qqxSw0ZZhEaXsRfjJR6Ir7zZeGGi4Y53fRXBA=="/>
-        </item>
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: gJSBqv22xnf5uwzWGb71kZxzHdYHyOAhn7JJ/soiqvMS7QyVQCz3P8gF1tQtubHscI9uJUWWej37BQItF2hnBA==
-length: 3508
+edSignature: jU4zuOqgNDRCAHKw/Is8VN81pw5c4mN3+ZpMwLtU9azu3cZtKgPfBiXEeK6pT0mz3hYcUbxY6lysmkMw2KxQCg==
+length: 3506
 -->
