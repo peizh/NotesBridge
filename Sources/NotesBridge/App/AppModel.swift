@@ -315,8 +315,12 @@ final class AppModel: ObservableObject {
         settings.automaticSyncInterval
     }
 
-    var indexedFolderCount: Int {
-        syncIndex.lastFullSyncFolderCount ?? folderSummaries.count
+    var knownFolderCount: Int {
+        if !folderSummaries.isEmpty {
+            return folderSummaries.count
+        }
+
+        return syncIndex.knownFolderCount ?? syncIndex.lastFullSyncFolderCount ?? 0
     }
 
     var selectionSummary: String {
@@ -634,6 +638,8 @@ final class AppModel: ObservableObject {
             folderSummaries = fetchedFolders.sorted {
                 $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
             }
+            syncIndex.knownFolderCount = folderSummaries.count
+            try persistence.saveSyncIndex(syncIndex)
             statusMessage = tf("Loaded %lld Apple Notes folders.", folderSummaries.count)
         } catch {
             present(error, fallback: t("Failed to refresh Apple Notes folders."))
@@ -832,6 +838,7 @@ final class AppModel: ObservableObject {
             folderSummaries = result.folders.sorted {
                 $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
             }
+            syncIndex.knownFolderCount = folderSummaries.count
             syncIndex.records = result.updatedRecords
             let persistStart = Date()
             let now = Date()
@@ -1227,11 +1234,12 @@ final class AppModel: ObservableObject {
             }
             let persistStart = Date()
             let now = Date()
+            syncIndex.knownFolderCount = result.folders.count
             syncIndex.lastSyncAt = now
             syncIndex.lastSyncMode = .full
             syncIndex.lastFullSyncAt = now
             syncIndex.lastFullSyncNoteCount = result.records.count
-            syncIndex.lastFullSyncFolderCount = result.exportedFolderCount
+            syncIndex.lastFullSyncFolderCount = result.folders.count
             try persistence.saveSyncIndex(syncIndex)
             let persistDuration = Date().timeIntervalSince(persistStart)
             let timingSummary = result.timings.summary(persistIndex: persistDuration)

@@ -35,6 +35,7 @@ enum SyncRunMode: String, Codable, Sendable {
 
 struct SyncIndex: Codable, Sendable {
     var records: [String: SyncRecord] = [:]
+    var knownFolderCount: Int?
     var lastSyncAt: Date?
     var lastSyncMode: SyncRunMode?
     var lastIncrementalSyncAt: Date?
