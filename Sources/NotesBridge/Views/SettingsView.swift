@@ -288,7 +288,7 @@ struct SettingsView: View {
 
                 Section(appModel.t("Indexing & Sync")) {
                     LabeledContent(appModel.t("Known Folders")) {
-                        Text("\(appModel.folderSummaries.count)")
+                        Text("\(appModel.knownFolderCount)")
                     }
                     LabeledContent(appModel.t("Indexed Notes")) {
                         Text("\(appModel.syncedNoteCount)")

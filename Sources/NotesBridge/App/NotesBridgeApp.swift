@@ -19,7 +19,7 @@ struct NotesBridgeApp: App {
                 isSyncing: appModel.isSyncing,
                 frameIndex: appModel.menuBarSyncFrameIndex
             )
-            .frame(width: 18, height: 18)
+            .frame(width: 22, height: 22)
         }
         .menuBarExtraStyle(.window)
 
