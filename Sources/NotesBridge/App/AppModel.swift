@@ -129,6 +129,7 @@ final class AppModel: ObservableObject {
     private let formattingBarController: FloatingFormattingBarController
     private let statusObserver: (@MainActor @Sendable (String) -> Void)?
     private let appleNotesDataFolderAccessSessionFactory: AppleNotesDataFolderAccessSessionFactory
+    private let automaticSyncDebounceInterval: TimeInterval
     private var syncIndex: SyncIndex
     private var syncAnimationCancellable: AnyCancellable?
     private var automaticSyncCancellable: AnyCancellable?
@@ -152,6 +153,7 @@ final class AppModel: ObservableObject {
         statusObserver: (@MainActor @Sendable (String) -> Void)? = nil,
         appleNotesDataFolderAccessSessionFactory: @escaping AppleNotesDataFolderAccessSessionFactory = makeAppleNotesDataFolderAccessSession,
         notesDatabaseWatcher: any NotesDatabaseWatching = NotesDatabaseWatcher(),
+        automaticSyncDebounceInterval: TimeInterval = 5.0,
         startImmediately: Bool = true
     ) {
         let resolvedBuildFlavor = buildFlavor
@@ -197,6 +199,7 @@ final class AppModel: ObservableObject {
         self.formattingBarController = formattingBarController
         self.statusObserver = statusObserver
         self.appleNotesDataFolderAccessSessionFactory = appleNotesDataFolderAccessSessionFactory
+        self.automaticSyncDebounceInterval = automaticSyncDebounceInterval
         self.interactionState = InteractionState(
             selectionContext: nil,
             availability: .default(for: resolvedBuildFlavor)
@@ -1489,9 +1492,9 @@ final class AppModel: ObservableObject {
 
     private func handleDatabaseChange() {
         pendingOnChangeSyncTask?.cancel()
+        let debounceIntervalNanoseconds = UInt64(max(automaticSyncDebounceInterval, 0) * 1_000_000_000)
         pendingOnChangeSyncTask = Task {
-            // Debounce 5 seconds
-            try? await Task.sleep(nanoseconds: 5 * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: debounceIntervalNanoseconds)
             if Task.isCancelled { return }
             await runAutomaticSyncIfNeeded()
         }
