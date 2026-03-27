@@ -7,25 +7,31 @@ struct AppModelAutomaticSyncTests {
     @Test
     func onChangeWatcherDebouncesBackgroundNotificationsWithoutDroppingLifecycleBehavior() async {
         let watcher = ManualNotesDatabaseWatcher()
+        let syncProbe = AutomaticSyncProbe()
         var settings = AppSettings.default
+        settings.vaultPath = "/tmp/notesbridge-tests"
         settings.appleNotesDataPath = "/tmp/group.com.apple.notes"
         settings.automaticSyncEnabled = true
         settings.automaticSyncTrigger = .onChange
 
         let model = AppModel(
-            appleNotesSyncDataSource: StubAutomaticSyncDataSource(),
+            appleNotesSyncDataSource: RecordingAutomaticSyncDataSource(),
+            syncEngine: RecordingAutomaticSyncEngine(probe: syncProbe),
             persistence: StubAutomaticSyncPersistenceStore(settings: settings),
             appUpdater: NoOpAppUpdater(version: AppVersion(shortVersionString: "0.2.9", buildNumber: "1")),
             notesDatabaseWatcher: watcher,
+            automaticSyncDebounceInterval: 0.05,
             startImmediately: false
         )
 
         model.settings = settings
-        watcher.fire()
-        watcher.fire()
+        await watcher.fire()
+        await watcher.fire()
+        try? await Task.sleep(nanoseconds: 250_000_000)
 
         #expect(watcher.startCallCount == 1)
         #expect(watcher.stopCallCount == 1)
+        #expect(syncProbe.syncCallCount == 1)
     }
 
     @MainActor
@@ -131,9 +137,115 @@ private struct StubAutomaticSyncDataSource: AppleNotesSyncDataSourcing {
     }
 }
 
+private struct RecordingAutomaticSyncDataSource: AppleNotesSyncDataSourcing {
+    func validateDataFolder(at path: String) throws -> AppleNotesDataFolderSelection {
+        .resolved(rootPath: path)
+    }
+
+    func inspectDataFolder(at path: String) -> AppleNotesDataFolderAccessStatus {
+        AppleNotesDataFolderAccessStatus(
+            level: .accessible,
+            message: "The configured Apple Notes data folder is readable."
+        )
+    }
+
+    func fetchFolders(fromDataFolder path: String) throws -> [AppleNotesFolder] {
+        [
+            AppleNotesFolder(id: "folder-1", name: "Inbox", accountName: nil, noteCount: 1),
+        ]
+    }
+
+    func loadManifest(fromDataFolder path: String) throws -> AppleNotesSyncManifest {
+        AppleNotesSyncManifest(
+            folders: try fetchFolders(fromDataFolder: path),
+            entries: [
+                AppleNotesSyncManifestEntry(
+                    databaseNoteID: 1,
+                    name: "Stable",
+                    folder: "Inbox",
+                    updatedAt: Date(timeIntervalSince1970: 1),
+                    passwordProtected: false,
+                    trashed: false
+                ),
+            ],
+            skippedLockedNotes: 0,
+            skippedLockedNotesByFolder: [:],
+            sourceDiagnostics: nil,
+            selectedDatabaseRelativePath: nil
+        )
+    }
+
+    func loadDocuments(
+        fromDataFolder path: String,
+        noteIDs: Set<Int64>,
+        preferredDatabaseRelativePath: String?
+    ) throws -> AppleNotesSyncSnapshot {
+        AppleNotesSyncSnapshot(
+            folders: try fetchFolders(fromDataFolder: path),
+            documents: [
+                AppleNotesSyncDocument(
+                    databaseNoteID: 1,
+                    name: "Stable",
+                    folder: "Inbox",
+                    createdAt: Date(timeIntervalSince1970: 0),
+                    updatedAt: Date(timeIntervalSince1970: 1),
+                    shared: false,
+                    passwordProtected: false,
+                    markdownTemplate: "Stable",
+                    attachments: []
+                ),
+            ],
+            skippedLockedNotes: 0,
+            skippedLockedNotesByFolder: [:]
+        )
+    }
+
+    func loadSnapshot(fromDataFolder path: String) throws -> AppleNotesSyncSnapshot {
+        try loadDocuments(
+            fromDataFolder: path,
+            noteIDs: [1],
+            preferredDatabaseRelativePath: nil
+        )
+    }
+}
+
 private final class AccessSessionProbe: @unchecked Sendable {
     var createdCount = 0
     var stoppedCount = 0
+}
+
+private final class AutomaticSyncProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private(set) var syncCallCount = 0
+
+    func recordSyncCall() {
+        lock.lock()
+        syncCallCount += 1
+        lock.unlock()
+    }
+}
+
+private struct RecordingAutomaticSyncEngine: Syncing {
+    let probe: AutomaticSyncProbe
+
+    func sync(
+        document: AppleNotesSyncDocument,
+        settings: AppSettings,
+        existingRelativePath: String?,
+        plannedRelativePath: String,
+        plannedRelativePathsBySourceIdentifier: [String: String]
+    ) throws -> NoteSyncResult {
+        probe.recordSyncCall()
+        return NoteSyncResult(
+            record: SyncRecord(
+                noteID: document.id,
+                relativePath: plannedRelativePath,
+                sourceUpdatedAt: document.updatedAt
+            ),
+            changeKind: existingRelativePath == nil ? .created : .updated,
+            unresolvedInternalLinkCount: 0
+        )
+    }
 }
 
 private final class ManualNotesDatabaseWatcher: NotesDatabaseWatching, @unchecked Sendable {
@@ -149,9 +261,9 @@ private final class ManualNotesDatabaseWatcher: NotesDatabaseWatching, @unchecke
         stopCallCount += 1
     }
 
-    func fire() {
-        Task { @MainActor in
+    func fire() async {
+        await Task { @MainActor in
             onChange?()
-        }
+        }.value
     }
 }
