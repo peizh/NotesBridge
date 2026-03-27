@@ -6,6 +6,7 @@ final class NotesDatabaseWatcher {
     var onChange: (@MainActor @Sendable () -> Void)?
     private let pollInterval: TimeInterval = 2.0
     private var isRunning = false
+    private var hasEstablishedBaseline = false
     private var lastModificationDates: [URL: Date] = [:]
     private var timer: Timer?
     private var dataFolderURL: URL?
@@ -15,6 +16,7 @@ final class NotesDatabaseWatcher {
     func start(dataFolderURL: URL) {
         self.dataFolderURL = dataFolderURL
         self.isRunning = true
+        self.hasEstablishedBaseline = false
         self.lastModificationDates = [:]
 
         self.scheduleTimer()
@@ -47,6 +49,8 @@ final class NotesDatabaseWatcher {
                 if let modificationDate = attributes[.modificationDate] as? Date {
                     if let lastDate = lastModificationDates[url], modificationDate > lastDate {
                         changed = true
+                    } else if hasEstablishedBaseline, lastModificationDates[url] == nil {
+                        changed = true
                     }
                     lastModificationDates[url] = modificationDate
                 }
@@ -54,6 +58,8 @@ final class NotesDatabaseWatcher {
                 // File might be temporarily missing or unreadable
             }
         }
+
+        hasEstablishedBaseline = true
 
         if changed {
             onChange?()
