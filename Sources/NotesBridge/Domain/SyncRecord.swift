@@ -35,6 +35,7 @@ enum SyncRunMode: String, Codable, Sendable {
 
 struct SyncIndex: Codable, Sendable {
     var records: [String: SyncRecord] = [:]
+    var pathAliases: [String: String] = [:]
     var knownFolderCount: Int?
     var lastSyncAt: Date?
     var lastSyncMode: SyncRunMode?
@@ -43,4 +44,54 @@ struct SyncIndex: Codable, Sendable {
     var lastFullSyncAt: Date?
     var lastFullSyncNoteCount: Int?
     var lastFullSyncFolderCount: Int?
+
+    mutating func rememberPath(_ relativePath: String, for identifiers: [String]) {
+        for identifier in identifiers where !identifier.isEmpty {
+            pathAliases[identifier] = relativePath
+        }
+    }
+
+    mutating func removePathAliases(for identifiers: [String]) {
+        for identifier in identifiers where !identifier.isEmpty {
+            pathAliases.removeValue(forKey: identifier)
+        }
+    }
+
+    init(
+        records: [String: SyncRecord] = [:],
+        pathAliases: [String: String] = [:],
+        knownFolderCount: Int? = nil,
+        lastSyncAt: Date? = nil,
+        lastSyncMode: SyncRunMode? = nil,
+        lastIncrementalSyncAt: Date? = nil,
+        lastAutomaticSyncAt: Date? = nil,
+        lastFullSyncAt: Date? = nil,
+        lastFullSyncNoteCount: Int? = nil,
+        lastFullSyncFolderCount: Int? = nil
+    ) {
+        self.records = records
+        self.pathAliases = pathAliases
+        self.knownFolderCount = knownFolderCount
+        self.lastSyncAt = lastSyncAt
+        self.lastSyncMode = lastSyncMode
+        self.lastIncrementalSyncAt = lastIncrementalSyncAt
+        self.lastAutomaticSyncAt = lastAutomaticSyncAt
+        self.lastFullSyncAt = lastFullSyncAt
+        self.lastFullSyncNoteCount = lastFullSyncNoteCount
+        self.lastFullSyncFolderCount = lastFullSyncFolderCount
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.records = try container.decodeIfPresent([String: SyncRecord].self, forKey: .records) ?? [:]
+        self.pathAliases = try container.decodeIfPresent([String: String].self, forKey: .pathAliases) ?? [:]
+        self.knownFolderCount = try container.decodeIfPresent(Int.self, forKey: .knownFolderCount)
+        self.lastSyncAt = try container.decodeIfPresent(Date.self, forKey: .lastSyncAt)
+        self.lastSyncMode = try container.decodeIfPresent(SyncRunMode.self, forKey: .lastSyncMode)
+        self.lastIncrementalSyncAt = try container.decodeIfPresent(Date.self, forKey: .lastIncrementalSyncAt)
+        self.lastAutomaticSyncAt = try container.decodeIfPresent(Date.self, forKey: .lastAutomaticSyncAt)
+        self.lastFullSyncAt = try container.decodeIfPresent(Date.self, forKey: .lastFullSyncAt)
+        self.lastFullSyncNoteCount = try container.decodeIfPresent(Int.self, forKey: .lastFullSyncNoteCount)
+        self.lastFullSyncFolderCount = try container.decodeIfPresent(Int.self, forKey: .lastFullSyncFolderCount)
+    }
 }
