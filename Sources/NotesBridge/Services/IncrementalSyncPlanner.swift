@@ -36,7 +36,8 @@ struct IncrementalSyncPlanner: Sendable {
         let trashedEntryIDs = Set(manifest.entries.filter(\.trashed).map(\.id))
         let presentEntryIDs = Set(manifest.entries.map(\.id))
 
-        var occupiedRelativePaths = Set(indexedRelativePaths.values)
+        var occupiedRelativePaths = syncIndex.occupiedRelativePaths
+        occupiedRelativePaths.formUnion(indexedRelativePaths.values)
         var plannedRelativePathsBySourceIdentifier: [String: String] = [:]
         var exports: [PlannedIncrementalDocumentExport] = []
         var unchangedNoteCount = 0
@@ -125,6 +126,20 @@ struct IncrementalSyncPlanner: Sendable {
         indexedRelativePaths: [String: String]
     ) -> String? {
         if let relativePath = syncIndex.records[entry.id]?.relativePath {
+            return relativePath
+        }
+
+        if let relativePath = syncIndex.pathAliases[entry.id] {
+            return relativePath
+        }
+
+        if let relativePath = syncIndex.pathAliases[entry.sourceNoteIdentifierRaw] {
+            return relativePath
+        }
+
+        if let deepLink = entry.appleNotesDeepLink,
+           let relativePath = syncIndex.pathAliases[deepLink]
+        {
             return relativePath
         }
 

@@ -99,6 +99,35 @@ struct IncrementalSyncPlannerTests {
         #expect(plan.unchangedNoteCount == 1)
     }
 
+    @Test
+    func prefersPersistedPathAliasesBeforeRecoveryScanResults() {
+        let manifest = AppleNotesSyncManifest(
+            folders: [],
+            entries: [entry(id: 7, name: "Stable", folder: "Inbox", updatedAt: date(700))],
+            skippedLockedNotes: 0,
+            skippedLockedNotesByFolder: [:],
+            sourceDiagnostics: nil
+        )
+        let syncIndex = SyncIndex(
+            records: [:],
+            pathAliases: [
+                AppleNotesSyncDocument.canonicalID(for: 7): "Apple Notes/Inbox/Stable.md",
+                "x-coredata://example/ICNote/p7": "Apple Notes/Inbox/Stable.md",
+            ]
+        )
+
+        let plan = planner.plan(
+            manifest: manifest,
+            syncIndex: syncIndex,
+            indexedRelativePaths: [
+                AppleNotesSyncDocument.canonicalID(for: 7): "Apple Notes/Inbox/Recovered.md",
+            ],
+            settings: .default
+        )
+
+        #expect(plan.exports.first?.existingRelativePath == "Apple Notes/Inbox/Stable.md")
+    }
+
     private func entry(
         id: Int64,
         name: String,

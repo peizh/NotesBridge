@@ -57,6 +57,23 @@ struct SyncIndex: Codable, Sendable {
         }
     }
 
+    mutating func removePathAliases(forRelativePath relativePath: String) {
+        let identifiers = pathAliases.compactMap { identifier, candidateRelativePath in
+            candidateRelativePath == relativePath ? identifier : nil
+        }
+        removePathAliases(for: identifiers)
+    }
+
+    mutating func mergePathAliases(_ aliases: [String: String]) {
+        for (identifier, relativePath) in aliases where !identifier.isEmpty {
+            pathAliases[identifier] = relativePath
+        }
+    }
+
+    var occupiedRelativePaths: Set<String> {
+        Set(records.values.map(\.relativePath)).union(pathAliases.values)
+    }
+
     init(
         records: [String: SyncRecord] = [:],
         pathAliases: [String: String] = [:],

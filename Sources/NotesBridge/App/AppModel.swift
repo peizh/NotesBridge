@@ -694,6 +694,21 @@ final class AppModel: ObservableObject {
             let result = try await Task.detached(priority: .utility) {
                 let totalStart = Date()
                 var timings = IncrementalSyncTimings()
+                var updatedSyncIndex = syncIndexSnapshot
+
+                func pathAliasIdentifiers(for document: AppleNotesSyncDocument) -> [String] {
+                    [
+                        document.id,
+                        document.sourceNoteIdentifierRaw,
+                        document.appleNotesDeepLink ?? "",
+                        document.legacyNoteID ?? "",
+                    ]
+                }
+
+                for record in updatedSyncIndex.records.values {
+                    updatedSyncIndex.rememberPath(record.relativePath, for: [record.noteID])
+                }
+
                 let loadManifestStart = Date()
                 let manifest = try {
                     if let accessSession = accessSessionFactory(dataFolderSelection.rootURL.path, dataFolderBookmark) {
@@ -704,13 +719,19 @@ final class AppModel: ObservableObject {
                 }()
                 timings.loadManifest = Date().timeIntervalSince(loadManifestStart)
 
-                let scanExistingStart = Date()
-                let indexedRelativePaths = try vaultClient.indexExistingNotes(settings: settings)
-                timings.scanExisting = Date().timeIntervalSince(scanExistingStart)
+                let indexedRelativePaths: [String: String]
+                if updatedSyncIndex.pathAliases.isEmpty {
+                    let scanExistingStart = Date()
+                    indexedRelativePaths = try vaultClient.indexExistingNotes(settings: settings)
+                    timings.scanExisting = Date().timeIntervalSince(scanExistingStart)
+                    updatedSyncIndex.mergePathAliases(indexedRelativePaths)
+                } else {
+                    indexedRelativePaths = [:]
+                }
 
                 let plan = incrementalSyncPlanner.plan(
                     manifest: manifest,
-                    syncIndex: syncIndexSnapshot,
+                    syncIndex: updatedSyncIndex,
                     indexedRelativePaths: indexedRelativePaths,
                     settings: settings
                 )
@@ -788,6 +809,10 @@ final class AppModel: ObservableObject {
                         )
                         timings.export += Date().timeIntervalSince(exportStart)
                         updatedRecords[syncResult.record.noteID] = syncResult.record
+                        updatedSyncIndex.rememberPath(
+                            syncResult.record.relativePath,
+                            for: pathAliasIdentifiers(for: document)
+                        )
                         switch syncResult.changeKind {
                         case .created:
                             addedNoteCount += 1
@@ -814,6 +839,8 @@ final class AppModel: ObservableObject {
                     ) != nil {
                         movedRemovedNotes += 1
                     }
+                    updatedSyncIndex.removePathAliases(forRelativePath: removedRecord.relativePath)
+                    updatedSyncIndex.removePathAliases(for: [removedRecord.noteID])
                     updatedRecords.removeValue(forKey: removedRecord.noteID)
                 }
                 timings.removeDeleted = Date().timeIntervalSince(removeDeletedStart)
@@ -827,6 +854,7 @@ final class AppModel: ObservableObject {
                     updatedNoteCount: updatedNoteCount,
                     removedNoteCount: movedRemovedNotes,
                     unchangedNoteCount: plan.unchangedNoteCount + exportedUnchangedNoteCount,
+                    pathAliases: updatedSyncIndex.pathAliases,
                     timings: timings,
                     diagnostics: IncrementalSyncDiagnostics(
                         skippedNotes: plan.skippedLockedNotes,
@@ -840,6 +868,7 @@ final class AppModel: ObservableObject {
             }
             syncIndex.knownFolderCount = folderSummaries.count
             syncIndex.records = result.updatedRecords
+            syncIndex.pathAliases = result.pathAliases
             let persistStart = Date()
             let now = Date()
             syncIndex.lastSyncAt = now
@@ -897,7 +926,7 @@ final class AppModel: ObservableObject {
         let settings = self.settings
         let dataFolderBookmark = self.settings.appleNotesDataBookmark
         let accessSessionFactory = self.appleNotesDataFolderAccessSessionFactory
-        let existingRecords = self.syncIndex.records
+        let syncIndexSnapshot = self.syncIndex
         let progressReporter = makeSyncProgressReporter()
 
         isSyncing = true
@@ -918,6 +947,20 @@ final class AppModel: ObservableObject {
                 let totalStart = Date()
                 var timings = SyncTimings()
                 var diagnostics = SyncDiagnostics()
+                var updatedSyncIndex = syncIndexSnapshot
+
+                func pathAliasIdentifiers(for document: AppleNotesSyncDocument) -> [String] {
+                    [
+                        document.id,
+                        document.sourceNoteIdentifierRaw,
+                        document.appleNotesDeepLink ?? "",
+                        document.legacyNoteID ?? "",
+                    ]
+                }
+
+                for record in updatedSyncIndex.records.values {
+                    updatedSyncIndex.rememberPath(record.relativePath, for: [record.noteID])
+                }
 
                 func sortedDocuments(_ documents: [AppleNotesSyncDocument]) -> [AppleNotesSyncDocument] {
                     documents.sorted {
@@ -937,7 +980,9 @@ final class AppModel: ObservableObject {
                     for noteID: String,
                     indexedRelativePaths: [String: String]
                 ) -> String? {
-                    existingRecords[noteID]?.relativePath ?? indexedRelativePaths[noteID]
+                    syncIndexSnapshot.records[noteID]?.relativePath
+                        ?? updatedSyncIndex.pathAliases[noteID]
+                        ?? indexedRelativePaths[noteID]
                 }
 
                 func legacyIdentifier(
@@ -945,10 +990,24 @@ final class AppModel: ObservableObject {
                     indexedRelativePaths: [String: String]
                 ) -> String? {
                     let legacySuffix = "/ICNote/p\(databaseNoteID)"
-                    if let syncIndexMatch = existingRecords.keys.first(where: { $0.hasSuffix(legacySuffix) }) {
+                    if let syncIndexMatch = syncIndexSnapshot.records.keys.first(where: { $0.hasSuffix(legacySuffix) }) {
                         return syncIndexMatch
                     }
-                    return indexedRelativePaths.keys.first(where: { $0.hasSuffix(legacySuffix) })
+                    if let aliasMatch = updatedSyncIndex.pathAliases.keys.first(where: { $0.hasSuffix(legacySuffix) }) {
+                        return aliasMatch
+                    }
+                    if let recoveredMatch = indexedRelativePaths.keys.first(where: { $0.hasSuffix(legacySuffix) }) {
+                        return recoveredMatch
+                    }
+                    return nil
+                }
+
+                func buildOccupiedRelativePaths(
+                    indexedRelativePaths: [String: String]
+                ) -> Set<String> {
+                    var occupiedRelativePaths = updatedSyncIndex.occupiedRelativePaths
+                    occupiedRelativePaths.formUnion(indexedRelativePaths.values)
+                    return occupiedRelativePaths
                 }
 
                 func buildExportGroups(
@@ -1023,7 +1082,7 @@ final class AppModel: ObservableObject {
                     groups: [FolderExportGroup],
                     indexedRelativePaths: [String: String]
                 ) -> ([PlannedFolderExportGroup], [String: String], Set<String>) {
-                    var occupiedRelativePaths = Set(indexedRelativePaths.values)
+                    var occupiedRelativePaths = buildOccupiedRelativePaths(indexedRelativePaths: indexedRelativePaths)
                     var plannedRelativePathsBySourceIdentifier: [String: String] = [:]
                     var migratedLegacyIDs: Set<String> = []
                     var plannedGroups: [PlannedFolderExportGroup] = []
@@ -1111,10 +1170,16 @@ final class AppModel: ObservableObject {
                     )
                 }
 
-                let scanExistingStart = Date()
-                let indexedRelativePaths = try vaultClient.indexExistingNotes(settings: settings)
-                timings.scanExisting = Date().timeIntervalSince(scanExistingStart)
-                AppLog.sync.info("Indexed \(indexedRelativePaths.count) existing synced note path(s).")
+                let indexedRelativePaths: [String: String]
+                if updatedSyncIndex.pathAliases.isEmpty {
+                    let scanExistingStart = Date()
+                    indexedRelativePaths = try vaultClient.indexExistingNotes(settings: settings)
+                    timings.scanExisting = Date().timeIntervalSince(scanExistingStart)
+                    updatedSyncIndex.mergePathAliases(indexedRelativePaths)
+                    AppLog.sync.info("Indexed \(indexedRelativePaths.count) existing synced note path(s).")
+                } else {
+                    indexedRelativePaths = [:]
+                }
 
                 let folders = snapshot.folders.sorted {
                     $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
@@ -1169,6 +1234,10 @@ final class AppModel: ObservableObject {
                         )
                         timings.export += Date().timeIntervalSince(exportStart)
                         records.append(syncResult.record)
+                        updatedSyncIndex.rememberPath(
+                            syncResult.record.relativePath,
+                            for: pathAliasIdentifiers(for: plannedDocument.document)
+                        )
                         switch syncResult.changeKind {
                         case .created:
                             addedNoteCount += 1
@@ -1217,6 +1286,7 @@ final class AppModel: ObservableObject {
                     updatedNoteCount: updatedNoteCount,
                     unchangedNoteCount: unchangedNoteCount,
                     records: records,
+                    pathAliases: updatedSyncIndex.pathAliases,
                     timings: timings,
                     diagnostics: diagnostics,
                     migratedLegacyIDs: migratedLegacyIDs
@@ -1232,6 +1302,7 @@ final class AppModel: ObservableObject {
             for record in result.records {
                 syncIndex.records[record.noteID] = record
             }
+            syncIndex.pathAliases = result.pathAliases
             let persistStart = Date()
             let now = Date()
             syncIndex.knownFolderCount = result.folders.count
@@ -1455,6 +1526,7 @@ private struct FullSyncResult {
     var updatedNoteCount: Int
     var unchangedNoteCount: Int
     var records: [SyncRecord]
+    var pathAliases: [String: String]
     var timings: SyncTimings
     var diagnostics: SyncDiagnostics
     var migratedLegacyIDs: Set<String>
@@ -1468,6 +1540,7 @@ private struct IncrementalSyncResult {
     var updatedNoteCount: Int
     var removedNoteCount: Int
     var unchangedNoteCount: Int
+    var pathAliases: [String: String]
     var timings: IncrementalSyncTimings
     var diagnostics: IncrementalSyncDiagnostics
 }
