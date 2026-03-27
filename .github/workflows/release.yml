@@ -189,4 +189,18 @@ jobs:
           fi
 
           git commit -m "Publish Sparkle appcast for ${{ steps.meta.outputs.version }}"
-          git push origin HEAD:gh-pages
+
+          for attempt in 1 2 3; do
+            if git push origin HEAD:gh-pages; then
+              exit 0
+            fi
+
+            if [[ "$attempt" == "3" ]]; then
+              echo "Failed to push gh-pages after $attempt attempts." >&2
+              exit 1
+            fi
+
+            sleep_seconds=$((attempt * 5))
+            echo "gh-pages push failed on attempt $attempt; retrying in ${sleep_seconds}s..." >&2
+            sleep "$sleep_seconds"
+          done
