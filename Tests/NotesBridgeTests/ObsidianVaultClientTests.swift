@@ -809,6 +809,36 @@ struct ObsidianVaultClientTests {
         )
     }
 
+    @Test
+    func movesDeletedNotesUsingSharedOccupiedPaths() throws {
+        let vaultURL = try makeTemporaryVault()
+        defer { try? FileManager.default.removeItem(at: vaultURL) }
+
+        var settings = AppSettings.default
+        settings.vaultPath = vaultURL.path
+
+        let note = AppleNotesSyncDocument(
+            databaseNoteID: 22,
+            name: "Deleted",
+            folder: "Inbox",
+            createdAt: nil,
+            updatedAt: nil,
+            shared: false,
+            passwordProtected: false,
+            markdownTemplate: "Body",
+            attachments: []
+        )
+        let export = try client.export(note: note, settings: settings, existingRelativePath: nil)
+
+        let removedRelativePath = try client.moveExportedNoteToRemoved(
+            relativePath: export.relativePath,
+            settings: settings,
+            occupiedRelativePaths: ["Apple Notes/_Removed/Inbox/Deleted.md"]
+        )
+
+        #expect(removedRelativePath == "Apple Notes/_Removed/Inbox/Deleted 2.md")
+    }
+
     private func note(
         named title: String,
         in folder: String,

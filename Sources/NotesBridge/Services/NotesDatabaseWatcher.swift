@@ -1,44 +1,68 @@
+import Dispatch
 import Foundation
-import OSLog
 
-@MainActor
-final class NotesDatabaseWatcher {
+protocol NotesDatabaseWatching: AnyObject {
+    var onChange: (@MainActor @Sendable () -> Void)? { get set }
+    func start(dataFolderURL: URL)
+    func stop()
+}
+
+final class NotesDatabaseWatcher: NotesDatabaseWatching, @unchecked Sendable {
     var onChange: (@MainActor @Sendable () -> Void)?
-    private let pollInterval: TimeInterval = 2.0
+
+    private let pollInterval: TimeInterval
+    private let queue: DispatchQueue
     private var isRunning = false
     private var hasEstablishedBaseline = false
     private var lastModificationDates: [URL: Date] = [:]
-    private var timer: Timer?
+    private var timer: DispatchSourceTimer?
     private var dataFolderURL: URL?
 
-    init() {}
+    init(
+        pollInterval: TimeInterval = 2.0,
+        queue: DispatchQueue = DispatchQueue(label: "dev.notesbridge.watcher")
+    ) {
+        self.pollInterval = pollInterval
+        self.queue = queue
+    }
 
     func start(dataFolderURL: URL) {
-        self.dataFolderURL = dataFolderURL
-        self.isRunning = true
-        self.hasEstablishedBaseline = false
-        self.lastModificationDates = [:]
+        stop()
 
-        self.scheduleTimer()
-    }
+        queue.sync {
+            self.dataFolderURL = dataFolderURL
+            self.isRunning = true
+            self.hasEstablishedBaseline = false
+            self.lastModificationDates = [:]
 
-    func stop() {
-        isRunning = false
-        self.timer?.invalidate()
-        self.timer = nil
-    }
-
-    private func scheduleTimer() {
-        timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: pollInterval, repeats: true) { [weak self] _ in
-            Task { @MainActor in
+            let timer = DispatchSource.makeTimerSource(queue: queue)
+            timer.schedule(deadline: .now() + pollInterval, repeating: pollInterval)
+            timer.setEventHandler { [weak self] in
                 self?.check()
             }
+            self.timer = timer
+            timer.resume()
         }
     }
 
+    func stop() {
+        let timer = queue.sync { () -> DispatchSourceTimer? in
+            isRunning = false
+            dataFolderURL = nil
+            hasEstablishedBaseline = false
+            lastModificationDates = [:]
+
+            let timer = self.timer
+            self.timer = nil
+            return timer
+        }
+
+        timer?.setEventHandler {}
+        timer?.cancel()
+    }
+
     private func check() {
-        guard isRunning, let dataFolderURL = dataFolderURL else { return }
+        guard isRunning, let dataFolderURL else { return }
 
         let databaseURLs = findDatabaseFiles(in: dataFolderURL)
         var changed = false
@@ -55,13 +79,19 @@ final class NotesDatabaseWatcher {
                     lastModificationDates[url] = modificationDate
                 }
             } catch {
-                // File might be temporarily missing or unreadable
+                // File might be temporarily missing or unreadable.
             }
         }
 
         hasEstablishedBaseline = true
 
         if changed {
+            emitChange()
+        }
+    }
+
+    private func emitChange() {
+        Task { @MainActor in
             onChange?()
         }
     }
