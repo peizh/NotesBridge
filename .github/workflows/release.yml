@@ -191,6 +191,10 @@ jobs:
           git commit -m "Publish Sparkle appcast for ${{ steps.meta.outputs.version }}"
 
           for attempt in 1 2 3; do
+            if [[ "$attempt" != "1" ]]; then
+              git pull --rebase origin gh-pages
+            fi
+
             if git push origin HEAD:gh-pages; then
               exit 0
             fi
