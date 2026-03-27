@@ -5,6 +5,31 @@ import Testing
 struct AppModelAutomaticSyncTests {
     @MainActor
     @Test
+    func onChangeWatcherDebouncesBackgroundNotificationsWithoutDroppingLifecycleBehavior() async {
+        let watcher = ManualNotesDatabaseWatcher()
+        var settings = AppSettings.default
+        settings.appleNotesDataPath = "/tmp/group.com.apple.notes"
+        settings.automaticSyncEnabled = true
+        settings.automaticSyncTrigger = .onChange
+
+        let model = AppModel(
+            appleNotesSyncDataSource: StubAutomaticSyncDataSource(),
+            persistence: StubAutomaticSyncPersistenceStore(settings: settings),
+            appUpdater: NoOpAppUpdater(version: AppVersion(shortVersionString: "0.2.9", buildNumber: "1")),
+            notesDatabaseWatcher: watcher,
+            startImmediately: false
+        )
+
+        model.settings = settings
+        watcher.fire()
+        watcher.fire()
+
+        #expect(watcher.startCallCount == 1)
+        #expect(watcher.stopCallCount == 1)
+    }
+
+    @MainActor
+    @Test
     func onChangeWatcherRetainsDataFolderAccessSessionUntilAutomaticSyncStops() {
         let probe = AccessSessionProbe()
         var settings = AppSettings.default
@@ -109,4 +134,24 @@ private struct StubAutomaticSyncDataSource: AppleNotesSyncDataSourcing {
 private final class AccessSessionProbe: @unchecked Sendable {
     var createdCount = 0
     var stoppedCount = 0
+}
+
+private final class ManualNotesDatabaseWatcher: NotesDatabaseWatching, @unchecked Sendable {
+    var onChange: (@MainActor @Sendable () -> Void)?
+    private(set) var startCallCount = 0
+    private(set) var stopCallCount = 0
+
+    func start(dataFolderURL: URL) {
+        startCallCount += 1
+    }
+
+    func stop() {
+        stopCallCount += 1
+    }
+
+    func fire() {
+        Task { @MainActor in
+            onChange?()
+        }
+    }
 }

@@ -13,7 +13,7 @@ final class NotesDatabaseWatcherTests: XCTestCase {
         try "initial".write(to: dbURL, atomically: true, encoding: .utf8)
 
         let expectation = expectation(description: "Change detected")
-        let watcher = NotesDatabaseWatcher()
+        let watcher = NotesDatabaseWatcher(pollInterval: 0.2)
         defer { watcher.stop() }
 
         watcher.onChange = {
@@ -23,13 +23,12 @@ final class NotesDatabaseWatcherTests: XCTestCase {
         watcher.start(dataFolderURL: tempDir)
 
         // Wait for first poll to record initial dates
-        try await Task.sleep(nanoseconds: 2_500_000_000)
+        try await Task.sleep(nanoseconds: 300_000_000)
 
         // Modify file
         try "changed".write(to: dbURL, atomically: true, encoding: .utf8)
 
-        // Poll interval is 2s, wait enough time
-        await fulfillment(of: [expectation], timeout: 5.0)
+        await fulfillment(of: [expectation], timeout: 2.0)
     }
 
     func testWatcherDetectsFirstPostBaselineWALCreation() async throws {

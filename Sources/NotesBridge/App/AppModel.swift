@@ -132,7 +132,7 @@ final class AppModel: ObservableObject {
     private var syncIndex: SyncIndex
     private var syncAnimationCancellable: AnyCancellable?
     private var automaticSyncCancellable: AnyCancellable?
-    private let notesDatabaseWatcher: NotesDatabaseWatcher
+    private let notesDatabaseWatcher: any NotesDatabaseWatching
     private var watcherAccessSession: AppleNotesDataFolderAccessSession?
     private var pendingOnChangeSyncTask: Task<Void, Never>?
     private var cancellables: Set<AnyCancellable> = []
@@ -151,9 +151,11 @@ final class AppModel: ObservableObject {
         permissionsManager: PermissionsManager = PermissionsManager(),
         statusObserver: (@MainActor @Sendable (String) -> Void)? = nil,
         appleNotesDataFolderAccessSessionFactory: @escaping AppleNotesDataFolderAccessSessionFactory = makeAppleNotesDataFolderAccessSession,
+        notesDatabaseWatcher: any NotesDatabaseWatching = NotesDatabaseWatcher(),
         startImmediately: Bool = true
     ) {
         let resolvedBuildFlavor = buildFlavor
+        let resolvedNotesDatabaseWatcher = notesDatabaseWatcher
         self.notesClient = notesClient
         self.appleNotesSyncDataSource = appleNotesSyncDataSource
         self.appleNotesDataFolderSelector = appleNotesDataFolderSelector
@@ -199,8 +201,8 @@ final class AppModel: ObservableObject {
             selectionContext: nil,
             availability: .default(for: resolvedBuildFlavor)
         )
-        self.notesDatabaseWatcher = NotesDatabaseWatcher()
-        self.notesDatabaseWatcher.onChange = { [weak self] in
+        self.notesDatabaseWatcher = resolvedNotesDatabaseWatcher
+        resolvedNotesDatabaseWatcher.onChange = { [weak self] in
             self?.handleDatabaseChange()
         }
         self.slashCommandEngine.onKeyboardNavigationAvailabilityChanged = { [weak self] isAvailable in
@@ -724,6 +726,7 @@ final class AppModel: ObservableObject {
                     let scanExistingStart = Date()
                     indexedRelativePaths = try vaultClient.indexExistingNotes(settings: settings)
                     timings.scanExisting = Date().timeIntervalSince(scanExistingStart)
+                    timings.usedRecoveryScan = true
                     updatedSyncIndex.mergePathAliases(indexedRelativePaths)
                 } else {
                     indexedRelativePaths = [:]
@@ -736,27 +739,51 @@ final class AppModel: ObservableObject {
                     settings: settings
                 )
 
-                let noteIDsToLoad = Set(plan.exports.map(\.manifestEntry.databaseNoteID))
-                let loadDocumentsStart = Date()
-                let changedSnapshot = try {
-                    if let accessSession = accessSessionFactory(dataFolderSelection.rootURL.path, dataFolderBookmark) {
-                        defer { accessSession.stopAccessing() }
+                if plan.exports.isEmpty && plan.removedRecords.isEmpty {
+                    timings.total = Date().timeIntervalSince(totalStart)
+                    return IncrementalSyncResult(
+                        folders: plan.folders,
+                        updatedRecords: syncIndexSnapshot.records,
+                        processedNoteCount: plan.processedNoteCount,
+                        addedNoteCount: 0,
+                        updatedNoteCount: 0,
+                        removedNoteCount: 0,
+                        unchangedNoteCount: plan.unchangedNoteCount,
+                        pathAliases: updatedSyncIndex.pathAliases,
+                        timings: timings,
+                        diagnostics: IncrementalSyncDiagnostics(
+                            skippedNotes: plan.skippedLockedNotes,
+                            unresolvedInternalLinks: 0
+                        )
+                    )
+                }
+
+                let changedDocumentsByID: [String: AppleNotesSyncDocument]
+                if plan.exports.isEmpty {
+                    changedDocumentsByID = [:]
+                } else {
+                    let noteIDsToLoad = Set(plan.exports.map(\.manifestEntry.databaseNoteID))
+                    let loadDocumentsStart = Date()
+                    let changedSnapshot = try {
+                        if let accessSession = accessSessionFactory(dataFolderSelection.rootURL.path, dataFolderBookmark) {
+                            defer { accessSession.stopAccessing() }
+                            return try appleNotesSyncDataSource.loadDocuments(
+                                fromDataFolder: accessSession.url.path,
+                                noteIDs: noteIDsToLoad,
+                                preferredDatabaseRelativePath: manifest.selectedDatabaseRelativePath
+                            )
+                        }
                         return try appleNotesSyncDataSource.loadDocuments(
-                            fromDataFolder: accessSession.url.path,
+                            fromDataFolder: dataFolderSelection.rootURL.path,
                             noteIDs: noteIDsToLoad,
                             preferredDatabaseRelativePath: manifest.selectedDatabaseRelativePath
                         )
-                    }
-                    return try appleNotesSyncDataSource.loadDocuments(
-                        fromDataFolder: dataFolderSelection.rootURL.path,
-                        noteIDs: noteIDsToLoad,
-                        preferredDatabaseRelativePath: manifest.selectedDatabaseRelativePath
+                    }()
+                    timings.loadChangedDocuments = Date().timeIntervalSince(loadDocumentsStart)
+                    changedDocumentsByID = Dictionary(
+                        uniqueKeysWithValues: changedSnapshot.documents.map { ($0.id, $0) }
                     )
-                }()
-                timings.loadChangedDocuments = Date().timeIntervalSince(loadDocumentsStart)
-                let changedDocumentsByID = Dictionary(
-                    uniqueKeysWithValues: changedSnapshot.documents.map { ($0.id, $0) }
-                )
+                }
 
                 var missingDocumentIDs: [String] = []
                 for plannedExport in plan.exports where changedDocumentsByID[plannedExport.manifestEntry.id] == nil {
@@ -832,13 +859,17 @@ final class AppModel: ObservableObject {
 
                 let removeDeletedStart = Date()
                 var movedRemovedNotes = 0
+                var occupiedRemovalPaths = updatedSyncIndex.occupiedRelativePaths
                 for removedRecord in plan.removedRecords {
-                    if try vaultClient.moveExportedNoteToRemoved(
+                    if let removedRelativePath = try vaultClient.moveExportedNoteToRemoved(
                         relativePath: removedRecord.relativePath,
-                        settings: settings
-                    ) != nil {
+                        settings: settings,
+                        occupiedRelativePaths: occupiedRemovalPaths
+                    ) {
                         movedRemovedNotes += 1
+                        occupiedRemovalPaths.insert(removedRelativePath)
                     }
+                    occupiedRemovalPaths.remove(removedRecord.relativePath)
                     updatedSyncIndex.removePathAliases(forRelativePath: removedRecord.relativePath)
                     updatedSyncIndex.removePathAliases(for: [removedRecord.noteID])
                     updatedRecords.removeValue(forKey: removedRecord.noteID)
@@ -1175,6 +1206,7 @@ final class AppModel: ObservableObject {
                     let scanExistingStart = Date()
                     indexedRelativePaths = try vaultClient.indexExistingNotes(settings: settings)
                     timings.scanExisting = Date().timeIntervalSince(scanExistingStart)
+                    timings.usedRecoveryScan = true
                     updatedSyncIndex.mergePathAliases(indexedRelativePaths)
                     AppLog.sync.info("Indexed \(indexedRelativePaths.count) existing synced note path(s).")
                 } else {
@@ -1624,10 +1656,12 @@ private struct SyncTimings: Sendable {
     var scanExisting: TimeInterval = 0
     var export: TimeInterval = 0
     var total: TimeInterval = 0
+    var usedRecoveryScan = false
 
     func summary(persistIndex: TimeInterval) -> String {
         let totalDuration = total + persistIndex
-        return "Total \(totalDuration.formattedDuration); snapshot \(loadSnapshot.formattedDuration); index \(scanExisting.formattedDuration); export \(export.formattedDuration); persist \(persistIndex.formattedDuration)."
+        let indexMode = usedRecoveryScan ? "recovered" : "cached"
+        return "Total \(totalDuration.formattedDuration); snapshot \(loadSnapshot.formattedDuration); index \(scanExisting.formattedDuration) (\(indexMode)); export \(export.formattedDuration); persist \(persistIndex.formattedDuration)."
     }
 }
 
@@ -1638,10 +1672,12 @@ private struct IncrementalSyncTimings: Sendable {
     var removeDeleted: TimeInterval = 0
     var export: TimeInterval = 0
     var total: TimeInterval = 0
+    var usedRecoveryScan = false
 
     func summary(persistIndex: TimeInterval) -> String {
         let totalDuration = total + persistIndex
-        return "Total \(totalDuration.formattedDuration); manifest \(loadManifest.formattedDuration); changed \(loadChangedDocuments.formattedDuration); index \(scanExisting.formattedDuration); removed \(removeDeleted.formattedDuration); export \(export.formattedDuration); persist \(persistIndex.formattedDuration)."
+        let indexMode = usedRecoveryScan ? "recovered" : "cached"
+        return "Total \(totalDuration.formattedDuration); manifest \(loadManifest.formattedDuration); changed \(loadChangedDocuments.formattedDuration); index \(scanExisting.formattedDuration) (\(indexMode)); removed \(removeDeleted.formattedDuration); export \(export.formattedDuration); persist \(persistIndex.formattedDuration)."
     }
 }
 

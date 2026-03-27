@@ -190,6 +190,92 @@ struct AppModelSyncProgressTests {
     }
 
     @MainActor
+    @Test
+    func incrementalSyncWithNoExportsAndNoRemovalsSkipsChangedDocumentLoad() async {
+        var settings = AppSettings.default
+        settings.vaultPath = "/tmp/notesbridge-tests"
+        settings.appleNotesDataPath = "/tmp/group.com.apple.notes"
+
+        let dataSource = RecordingIncrementalDataSource(
+            folders: [
+                AppleNotesFolder(id: "folder-1", name: "Inbox", accountName: nil, noteCount: 1),
+            ],
+            documentsByFolderName: [
+                "Inbox": [Self.note(id: "note-1", name: "Stable", folder: "Inbox")],
+            ],
+            syncIndex: SyncIndex(
+                records: [
+                    AppleNotesSyncDocument.canonicalID(for: 1): SyncRecord(
+                        noteID: AppleNotesSyncDocument.canonicalID(for: 1),
+                        relativePath: "Apple Notes/Inbox/Stable.md",
+                        sourceUpdatedAt: nil,
+                        sourceName: "Stable",
+                        sourceFolderPath: "Inbox"
+                    ),
+                ],
+                pathAliases: [
+                    AppleNotesSyncDocument.canonicalID(for: 1): "Apple Notes/Inbox/Stable.md",
+                ]
+            )
+        )
+
+        let model = AppModel(
+            appleNotesSyncDataSource: dataSource,
+            persistence: StubPersistenceStore(settings: settings, syncIndex: dataSource.syncIndex),
+            appUpdater: makeTestAppUpdater(),
+            startImmediately: false
+        )
+
+        await model.syncChangedNotes()
+
+        #expect(dataSource.loadDocumentsCallCount == 0)
+        #expect(model.statusMessage.contains("found no changes"))
+    }
+
+    @MainActor
+    @Test
+    func noOpIncrementalSummaryShowsCachedPathIndex() async {
+        var settings = AppSettings.default
+        settings.vaultPath = "/tmp/notesbridge-tests"
+        settings.appleNotesDataPath = "/tmp/group.com.apple.notes"
+
+        let dataSource = RecordingIncrementalDataSource(
+            folders: [
+                AppleNotesFolder(id: "folder-1", name: "Inbox", accountName: nil, noteCount: 1),
+            ],
+            documentsByFolderName: [
+                "Inbox": [Self.note(id: "note-1", name: "Stable", folder: "Inbox")],
+            ],
+            syncIndex: SyncIndex(
+                records: [
+                    AppleNotesSyncDocument.canonicalID(for: 1): SyncRecord(
+                        noteID: AppleNotesSyncDocument.canonicalID(for: 1),
+                        relativePath: "Apple Notes/Inbox/Stable.md",
+                        sourceUpdatedAt: nil,
+                        sourceName: "Stable",
+                        sourceFolderPath: "Inbox"
+                    ),
+                ],
+                pathAliases: [
+                    AppleNotesSyncDocument.canonicalID(for: 1): "Apple Notes/Inbox/Stable.md",
+                ]
+            )
+        )
+
+        let model = AppModel(
+            appleNotesSyncDataSource: dataSource,
+            persistence: StubPersistenceStore(settings: settings, syncIndex: dataSource.syncIndex),
+            appUpdater: makeTestAppUpdater(),
+            startImmediately: false
+        )
+
+        await model.syncChangedNotes()
+
+        #expect(model.statusMessage.contains("index"))
+        #expect(model.statusMessage.contains("cached"))
+    }
+
+    @MainActor
     private func captureProgressSnapshots(
         from model: AppModel,
         perform operation: @escaping @MainActor () async -> Void
@@ -306,6 +392,91 @@ private struct StubAppleNotesSyncDataSource: AppleNotesSyncDataSourcing {
             documents: allDocuments.filter {
                 noteIDs.contains($0.databaseNoteID) && !missingDocumentIDsOnIncrementalLoad.contains($0.databaseNoteID)
             },
+            skippedLockedNotes: 0,
+            skippedLockedNotesByFolder: [:]
+        )
+    }
+
+    func loadSnapshot(fromDataFolder path: String) throws -> AppleNotesSyncSnapshot {
+        AppleNotesSyncSnapshot(
+            folders: folders,
+            documents: folders.flatMap { documentsByFolderName[$0.displayName] ?? [] },
+            skippedLockedNotes: 0,
+            skippedLockedNotesByFolder: [:]
+        )
+    }
+}
+
+private final class RecordingIncrementalDataSource: AppleNotesSyncDataSourcing, @unchecked Sendable {
+    let folders: [AppleNotesFolder]
+    let documentsByFolderName: [String: [AppleNotesSyncDocument]]
+    let syncIndex: SyncIndex
+
+    private let lock = NSLock()
+    private(set) var loadDocumentsCallCount = 0
+
+    init(
+        folders: [AppleNotesFolder],
+        documentsByFolderName: [String: [AppleNotesSyncDocument]],
+        syncIndex: SyncIndex
+    ) {
+        self.folders = folders
+        self.documentsByFolderName = documentsByFolderName
+        self.syncIndex = syncIndex
+    }
+
+    func validateDataFolder(at path: String) throws -> AppleNotesDataFolderSelection {
+        .resolved(rootPath: path)
+    }
+
+    func inspectDataFolder(at path: String) -> AppleNotesDataFolderAccessStatus {
+        AppleNotesDataFolderAccessStatus(
+            level: .accessible,
+            message: "The configured Apple Notes data folder is readable."
+        )
+    }
+
+    func fetchFolders(fromDataFolder path: String) throws -> [AppleNotesFolder] {
+        folders
+    }
+
+    func loadManifest(fromDataFolder path: String) throws -> AppleNotesSyncManifest {
+        let documents = folders.flatMap { documentsByFolderName[$0.displayName] ?? [] }
+        return AppleNotesSyncManifest(
+            folders: folders,
+            entries: documents.map { document in
+                AppleNotesSyncManifestEntry(
+                    databaseNoteID: document.databaseNoteID,
+                    sourceNoteIdentifier: document.sourceNoteIdentifierRaw,
+                    folderDatabaseID: document.folderDatabaseID,
+                    name: document.name,
+                    folder: document.folder,
+                    folderPath: document.folderPath,
+                    updatedAt: document.updatedAt,
+                    passwordProtected: document.passwordProtected,
+                    trashed: false
+                )
+            },
+            skippedLockedNotes: 0,
+            skippedLockedNotesByFolder: [:],
+            sourceDiagnostics: nil,
+            selectedDatabaseRelativePath: nil
+        )
+    }
+
+    func loadDocuments(
+        fromDataFolder path: String,
+        noteIDs: Set<Int64>,
+        preferredDatabaseRelativePath: String?
+    ) throws -> AppleNotesSyncSnapshot {
+        lock.lock()
+        loadDocumentsCallCount += 1
+        lock.unlock()
+
+        let allDocuments = folders.flatMap { documentsByFolderName[$0.displayName] ?? [] }
+        return AppleNotesSyncSnapshot(
+            folders: folders,
+            documents: allDocuments.filter { noteIDs.contains($0.databaseNoteID) },
             skippedLockedNotes: 0,
             skippedLockedNotesByFolder: [:]
         )

@@ -49,6 +49,18 @@ struct ObsidianVaultClient: Sendable {
         relativePath: String,
         settings: AppSettings
     ) throws -> String? {
+        try moveExportedNoteToRemoved(
+            relativePath: relativePath,
+            settings: settings,
+            occupiedRelativePaths: Set(try indexExistingNotes(settings: settings).values)
+        )
+    }
+
+    func moveExportedNoteToRemoved(
+        relativePath: String,
+        settings: AppSettings,
+        occupiedRelativePaths: Set<String>
+    ) throws -> String? {
         let fileManager = FileManager.default
         let vaultURL = try vaultURL(for: settings)
         let sourceURL = vaultURL.appendingPathComponent(relativePath)
@@ -64,7 +76,7 @@ struct ObsidianVaultClient: Sendable {
             return nil
         }
 
-        var occupiedRelativePaths = Set(try indexExistingNotes(settings: settings).values)
+        var occupiedRelativePaths = occupiedRelativePaths
         occupiedRelativePaths.remove(relativePath)
         let removedRelativePath = removedRelativePath(
             for: relativePath,
