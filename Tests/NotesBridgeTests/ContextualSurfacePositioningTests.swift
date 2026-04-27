@@ -103,4 +103,24 @@ final class ContextualSurfacePositioningTests: XCTestCase {
         // 1000 - 260 - 8 = 732
         XCTAssertEqual(origin.x, 732)
     }
+
+    func testContextualSurfacePanelDoesNotUseRectangularWindowShadow() {
+        let panel = controller.makePanel(contentRect: CGRect(x: 0, y: 0, width: 200, height: 60))
+
+        XCTAssertFalse(panel.hasShadow)
+    }
+
+    func testSlashCommandPanelDoesNotUseRectangularWindowShadow() {
+        let slashController = SlashCommandMenuController(
+            onHoverIndex: { _ in },
+            onSelectIndex: { _ in },
+            onFrameUpdated: { _ in },
+            onKeyboardAction: { _ in },
+            onPassthroughKeyDown: { _ in }
+        )
+
+        let panel = slashController.makePanel(contentRect: CGRect(x: 0, y: 0, width: 260, height: 88))
+
+        XCTAssertFalse(panel.hasShadow)
+    }
 }

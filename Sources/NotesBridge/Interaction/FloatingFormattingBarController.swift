@@ -29,7 +29,7 @@ final class FloatingFormattingBarController: ContextualSurfaceController {
             self?.hide()
         }
 
-        let size = hostingController?.view.fittingSize ?? CGSize(width: 420, height: 46)
+        let size = FormattingBarLayout.preferredSize(for: commands)
         update(rootView: rootView, anchorRect: selectionContext.selectionRect, size: size, preferredEdge: .maxY)
     }
 }
