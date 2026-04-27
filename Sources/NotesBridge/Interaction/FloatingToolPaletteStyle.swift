@@ -39,7 +39,23 @@ extension View {
         self
             .padding(.horizontal, FloatingToolPaletteStyle.containerHorizontalPadding)
             .padding(.vertical, FloatingToolPaletteStyle.containerVerticalPadding)
-            .notesBridgeGlassCard(cornerRadius: FloatingToolPaletteStyle.containerCornerRadius)
+            .background(
+                .thinMaterial,
+                in: RoundedRectangle(
+                    cornerRadius: FloatingToolPaletteStyle.containerCornerRadius,
+                    style: .continuous
+                )
+            )
+            .overlay {
+                RoundedRectangle(
+                    cornerRadius: FloatingToolPaletteStyle.containerCornerRadius,
+                    style: .continuous
+                )
+                .strokeBorder(
+                    Color.white.opacity(NotesBridgeGlassStyle.borderOpacity),
+                    lineWidth: 0.8
+                )
+            }
             .padding(FloatingToolPaletteStyle.outerPadding)
     }
 }

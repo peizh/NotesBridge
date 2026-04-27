@@ -70,7 +70,7 @@ final class SlashCommandMenuController: ContextualSurfaceController {
         panel.isFloatingPanel = true
         panel.becomesKeyOnlyIfNeeded = true
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
-        panel.hasShadow = true
+        panel.hasShadow = false
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hidesOnDeactivate = false
