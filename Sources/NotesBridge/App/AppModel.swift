@@ -115,6 +115,7 @@ final class AppModel: ObservableObject {
     private let notesClient: any AppleNotesClient
     private let appleNotesSyncDataSource: any AppleNotesSyncDataSourcing
     private let appleNotesDataFolderSelector: any AppleNotesDataFolderSelecting
+    private let vaultDirectorySelector: any VaultDirectorySelecting
     private let incrementalSyncPlanner: IncrementalSyncPlanner
     private let syncEngine: any Syncing
     private let vaultClient: ObsidianVaultClient
@@ -142,6 +143,7 @@ final class AppModel: ObservableObject {
         notesClient: any AppleNotesClient = AppleNotesScriptClient(),
         appleNotesSyncDataSource: any AppleNotesSyncDataSourcing = AppleNotesDatabaseSyncSource(),
         appleNotesDataFolderSelector: any AppleNotesDataFolderSelecting = AppleNotesDataFolderSelector(),
+        vaultDirectorySelector: any VaultDirectorySelecting = ObsidianVaultDirectorySelector(),
         incrementalSyncPlanner: IncrementalSyncPlanner = IncrementalSyncPlanner(),
         syncEngine: any Syncing = SyncEngine(),
         vaultClient: ObsidianVaultClient = ObsidianVaultClient(),
@@ -161,6 +163,7 @@ final class AppModel: ObservableObject {
         self.notesClient = notesClient
         self.appleNotesSyncDataSource = appleNotesSyncDataSource
         self.appleNotesDataFolderSelector = appleNotesDataFolderSelector
+        self.vaultDirectorySelector = vaultDirectorySelector
         self.incrementalSyncPlanner = incrementalSyncPlanner
         self.syncEngine = syncEngine
         self.vaultClient = vaultClient
@@ -523,15 +526,12 @@ final class AppModel: ObservableObject {
     }
 
     func chooseVaultDirectory() {
-        let panel = NSOpenPanel()
-        panel.title = t("Choose an Obsidian vault")
-        panel.prompt = t("Use Vault")
-        panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.canCreateDirectories = true
-
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard let url = vaultDirectorySelector.chooseVaultDirectory(
+            title: t("Choose an Obsidian vault"),
+            prompt: t("Use Vault")
+        ) else {
+            return
+        }
         settings.vaultPath = url.path
         statusMessage = tf("Obsidian vault set to %@.", url.lastPathComponent)
     }
