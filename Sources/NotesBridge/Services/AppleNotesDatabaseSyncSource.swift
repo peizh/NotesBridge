@@ -20,24 +20,16 @@ protocol AppleNotesDataFolderSelecting {
     func chooseAppleNotesDataFolder() -> URL?
 }
 
-@MainActor
 struct AppleNotesDataFolderSelector: AppleNotesDataFolderSelecting {
+    @MainActor
     func chooseAppleNotesDataFolder() -> URL? {
-        let panel = NSOpenPanel()
-        panel.title = "Choose Apple Notes Data Folder"
-        panel.prompt = "Use Folder"
-        panel.message = "Select the \"group.com.apple.notes\" folder to allow NotesBridge to read Apple Notes data."
-        panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.canCreateDirectories = false
-        panel.directoryURL = defaultAppleNotesDataFolderURL()
-
-        guard panel.runModal() == .OK else {
-            return nil
-        }
-
-        return panel.url
+        AppKitDirectoryPanel().chooseDirectory(
+            title: "Choose Apple Notes Data Folder",
+            prompt: "Use Folder",
+            message: "Select the \"group.com.apple.notes\" folder to allow NotesBridge to read Apple Notes data.",
+            directoryURL: defaultAppleNotesDataFolderURL(),
+            canCreateDirectories: false
+        )
     }
 
     func defaultAppleNotesDataFolderURL(fileManager: FileManager = .default) -> URL {
